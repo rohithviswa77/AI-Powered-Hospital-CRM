@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { toast } from 'react-toastify';
 
 const AddFollowUp = ({ onClose, editData }) => {
   const [staffMembers, setStaffMembers] = useState([]);
@@ -67,19 +68,19 @@ const AddFollowUp = ({ onClose, editData }) => {
         const updateData = { ...formData };
         delete updateData.id;
         await updateDoc(docRef, updateData);
-        alert("Follow up updated successfully!");
+        toast.success("Follow up updated successfully!");
       } else {
         await addDoc(collection(db, "followups"), {
           ...formData,
           addedOn: new Date().toLocaleDateString(),
           createdAt: serverTimestamp()
         });
-        alert("Follow up added successfully!");
+        toast.success("Follow up added successfully!");
       }
       onClose();
     } catch (error) {
-      console.error("Error saving follow-up: ", error);
-      alert("Failed to save follow-up.");
+      toast.error("Error saving follow-up: " + error.message);
+      toast.error("Failed to save follow-up.");
     } finally {
       setLoading(false);
     }

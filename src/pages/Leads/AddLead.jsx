@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { toast } from 'react-toastify';
 
 const AddLead = ({ onClose, leadData }) => {
   const [sources, setSources] = useState([]);
@@ -57,7 +58,7 @@ const AddLead = ({ onClose, leadData }) => {
         const updateData = { ...formData };
         delete updateData.id;
         await updateDoc(leadRef, updateData);
-        alert("Lead Updated Successfully!");
+        toast.success("Lead Updated Successfully!");
       } else {
         const newLeadData = {
           ...formData,
@@ -65,12 +66,12 @@ const AddLead = ({ onClose, leadData }) => {
           contactID: `L-${Math.random().toString(36).substr(2, 4).toUpperCase()}`
         };
         await addDoc(collection(db, "leads"), newLeadData);
-        alert("Lead Added Successfully!");
+        toast.success("Lead Added Successfully!");
       }
       onClose();
     } catch (error) {
-      console.error("Error saving lead: ", error);
-      alert("Error saving lead. Please check your connection.");
+      toast.error("Error saving lead: " + error.message);
+      toast.error("Error saving lead. Please check your connection.");
     } finally {
       setIsSubmitting(false);
     }

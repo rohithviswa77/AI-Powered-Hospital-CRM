@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, doc, deleteDoc, updateDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import AddAppointment from './AddAppointment';
+import { toast } from 'react-toastify';
 
 const Appointments = () => {
   const [appointments, setAppointments] = useState([]);
@@ -33,8 +34,9 @@ const Appointments = () => {
     if (window.confirm("Are you sure you want to delete this appointment?")) {
       try {
         await deleteDoc(doc(db, "appointments", id));
+        toast.success("Appointment deleted successfully.");
       } catch (error) {
-        console.error("Error deleting appointment:", error);
+        toast.error("Error deleting appointment: " + error.message);
       }
     }
   };
@@ -42,8 +44,9 @@ const Appointments = () => {
   const handleUpdateStatus = async (id, newStatus) => {
     try {
       await updateDoc(doc(db, "appointments", id), { status: newStatus });
+      toast.info(`Appointment marked as ${newStatus}.`);
     } catch (error) {
-      console.error("Error updating status:", error);
+      toast.error("Error updating status: " + error.message);
     }
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { toast } from 'react-toastify';
 
 const AddPatient = ({ onClose, patientData }) => {
   const [isScanning, setIsScanning] = useState(false);
@@ -58,10 +59,10 @@ const AddPatient = ({ onClose, patientData }) => {
       const cleanedJson = JSON.parse(textResponse.replace(/```json|```/g, "").trim());
 
       setFormData(prev => ({ ...prev, ...cleanedJson }));
-      alert("AI Scan Complete! Please review the auto-filled fields.");
+      toast.info("AI Scan Complete! Please review the auto-filled fields.");
     } catch (error) {
-      console.error("AI Error:", error);
-      alert("Failed to scan document. You can still enter details manually.");
+      toast.error("AI Error: " + error.message);
+      toast.error("Failed to scan document. You can still enter details manually.");
     } finally {
       setIsScanning(false);
     }
@@ -75,19 +76,19 @@ const AddPatient = ({ onClose, patientData }) => {
         const updateData = { ...formData };
         delete updateData.id;
         await updateDoc(patientRef, updateData);
-        alert("Patient Updated Successfully!");
+        toast.success("Patient Updated Successfully!");
       } else {
         await addDoc(collection(db, "patients"), {
           ...formData,
           patientID: `PAT-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
           createdAt: serverTimestamp()
         });
-        alert("Patient Registered Successfully!");
+        toast.success("Patient Registered Successfully!");
       }
       onClose();
     } catch (error) {
-      console.error("Error saving patient:", error);
-      alert("Error saving patient details.");
+      toast.error("Error saving patient: " + error.message);
+      toast.error("Error saving patient details.");
     }
   };
 
@@ -99,8 +100,8 @@ const AddPatient = ({ onClose, patientData }) => {
           <h2 className="text-xl font-bold text-neutral-800">{patientData ? 'Edit Patient' : 'Register Patient'}</h2>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            <label className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 whitespace-nowrap flex-1 text-center">
-              {isScanning ? "Scanning..." : "✨ Smart Scan Document"}
+            <label className="bg-gradient-to-r from-primary-500 to-secondary-500 hover:from-primary-600 hover:to-secondary-600 text-white px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 whitespace-nowrap flex-1 text-center">
+              {isScanning ? "Scanning..." : " Smart Scan Document"}
               <input type="file" accept="image/*,application/pdf" onChange={handleSmartScan} hidden disabled={isScanning} />
             </label>
             <button onClick={onClose} className="p-2 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200 rounded-full transition-colors shrink-0">

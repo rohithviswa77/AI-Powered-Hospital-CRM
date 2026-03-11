@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, onSnapshot, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import AddFollowUp from './AddFollowUp';
+import { toast } from 'react-toastify';
 
 const LOCATIONS = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
 
@@ -23,7 +24,7 @@ export default function FollowUps() {
       setFollowUps(data);
       setLoading(false);
     }, (error) => {
-      console.error("Error fetching follow-ups:", error);
+      toast.error("Error fetching follow-ups: " + error.message);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -33,9 +34,9 @@ export default function FollowUps() {
     if (window.confirm("Are you sure you want to delete this follow-up?")) {
       try {
         await deleteDoc(doc(db, "followups", id));
+        toast.success("Follow-up deleted successfully.");
       } catch (error) {
-        console.error("Error deleting document: ", error);
-        alert("Failed to delete follow-up.");
+        toast.error("Error deleting follow-up: " + error.message);
       }
     }
   };

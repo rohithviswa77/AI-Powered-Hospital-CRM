@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import AddOutreachLog from './AddOutreachLog';
+import { toast } from 'react-toastify';
 
 export default function OutreachLog() {
   const [logs, setLogs] = useState([]);
@@ -19,7 +20,7 @@ export default function OutreachLog() {
       setLogs(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     }, (error) => {
-      console.error("Error fetching outreach logs:", error);
+      toast.error("Error fetching outreach logs: " + error.message);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -90,7 +91,7 @@ export default function OutreachLog() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-neutral-700 italic leading-relaxed max-w-md break-words">
-                      <span className="text-purple-500 mr-1 inline-block -translate-y-px">✨</span> {log.aiSummary || "No summary generated"}
+                      <span className="text-purple-500 mr-1 inline-block -translate-y-px"></span> {log.aiSummary || "No summary generated"}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-neutral-500 break-words">{log.staffName}</td>
                   </tr>

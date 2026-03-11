@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { toast } from 'react-toastify';
 
 const AddAppointment = ({ onClose, appointmentData }) => {
   const [patients, setPatients] = useState([]);
@@ -39,17 +40,17 @@ const AddAppointment = ({ onClose, appointmentData }) => {
         const updateData = { ...formData };
         delete updateData.id;
         await updateDoc(docRef, updateData);
-        alert("Appointment Updated Successfully!");
+        toast.success("Appointment Updated Successfully!");
       } else {
         await addDoc(collection(db, "appointments"), {
           ...formData,
           createdAt: serverTimestamp()
         });
-        alert("Appointment Booked Successfully!");
+        toast.success("Appointment Booked Successfully!");
       }
       onClose();
     } catch (error) {
-      console.error(error);
+      toast.error("Error saving appointment: " + error.message);
     } finally {
       setLoading(false);
     }

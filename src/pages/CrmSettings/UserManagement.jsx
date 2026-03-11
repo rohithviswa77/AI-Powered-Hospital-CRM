@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, secondaryAuth } from '../../services/firebaseConfig';
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { toast } from 'react-toastify';
 
 // UPDATED: Added Appointments to the master navigation list
 const allNavItems = ["Dashboard", "Leads", "Follow ups", "Patients", "Outreach Log", "Appointments", "CRM Settings"];
@@ -41,7 +42,7 @@ const UserManagement = () => {
     e.preventDefault();
 
     if (!formData.location || formData.location === 'Select Location') {
-      alert("Please select a valid location.");
+      toast.warning("Please select a valid location.");
       return;
     }
 
@@ -53,7 +54,7 @@ const UserManagement = () => {
           location: formData.location,
           allowedNav: formData.allowedNav
         });
-        alert("User profile updated successfully!");
+        toast.success("User profile updated successfully!");
       } else {
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email, formData.password);
         const uid = userCredential.user.uid;
@@ -70,11 +71,11 @@ const UserManagement = () => {
         });
 
         await secondaryAuth.signOut();
-        alert(`User created successfully!\nPlease share the temporary password: ${formData.password}`);
+        toast.success(`User created successfully!\nPlease share the temporary password: ${formData.password}`);
       }
       resetForm();
     } catch (error) {
-      alert("Error: " + error.message);
+      toast.error("Error: " + error.message);
     }
   };
 
@@ -83,8 +84,9 @@ const UserManagement = () => {
     if (confirmDelete) {
       try {
         await deleteDoc(doc(db, "users", userId));
+        toast.success("User profile deleted successfully.");
       } catch (error) {
-        alert("Error deleting user profile: " + error.message);
+        toast.error("Error deleting user profile: " + error.message);
       }
     }
   };
@@ -203,8 +205,8 @@ const UserManagement = () => {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
-                      <button type="button" className="px-3 py-1 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded text-sm font-medium transition-colors" onClick={() => handleEditClick(user)}>Edit</button>
-                      <button type="button" className="px-3 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-sm font-medium transition-colors" onClick={() => handleDeleteUser(user.id, user.name)}>Delete</button>
+                      <button type="button" className="px-3 py-1 bg-primary-50 text-indigo-600 hover:bg-primary-100 rounded text-sm font-medium transition-colors" onClick={() => handleEditClick(user)}>Edit</button>
+                      <button type="button" className="px-3 py-1 bg-primary-50 text-red-600 hover:bg-primary-100 rounded text-sm font-medium transition-colors" onClick={() => handleDeleteUser(user.id, user.name)}>Delete</button>
                     </div>
                   </td>
                 </tr>

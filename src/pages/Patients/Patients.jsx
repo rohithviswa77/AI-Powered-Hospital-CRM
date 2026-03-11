@@ -3,6 +3,7 @@ import { db } from '../../services/firebaseConfig';
 import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import AddPatient from './AddPatient';
 import PatientHistory from './PatientHistory';
+import { toast } from 'react-toastify';
 
 const LOCATIONS = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
 
@@ -21,7 +22,7 @@ const Patients = () => {
       setPatients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     }, (error) => {
-      console.error("Error fetching patients:", error);
+      toast.error("Error fetching patients: " + error.message);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -29,13 +30,14 @@ const Patients = () => {
 
   // Replaced click outside effect directly into the new fixed-position effect above.
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (patientId) => {
     if (window.confirm("Are you sure you want to delete this patient record?")) {
       try {
-        await deleteDoc(doc(db, "patients", id));
+        await deleteDoc(doc(db, "patients", patientId));
+        toast.success("Patient record deleted successfully.");
       } catch (error) {
-        console.error("Error deleting patient:", error);
-        alert("Failed to delete record.");
+        toast.error("Error deleting patient: " + error.message);
+        toast.error("Failed to delete record.");
       }
     }
   };

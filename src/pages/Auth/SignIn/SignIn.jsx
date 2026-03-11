@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { auth, db } from '../../../services/firebaseConfig';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { toast } from 'react-toastify';
 
 const SignIn = () => {
   const [email, setEmail] = useState('');
@@ -26,18 +27,27 @@ const SignIn = () => {
       if (userDoc.exists()) {
         const userData = userDoc.data();
 
-        localStorage.setItem('staffUID', uid);
-        localStorage.setItem('staffRole', userData.role);
-        localStorage.setItem('staffEmail', userData.email || email);
+        if (userData.status === 'Inactive') {
+          toast.error("Your account has been deactivated. Please contact an administrator.");
+          await auth.signOut();
+          setLoading(false);
+          return;
+        }
 
-        window.location.href = '/';
+        localStorage.setItem('staffUID', userData.uid);
+        localStorage.setItem('staffRole', userData.role);
+        localStorage.setItem('staffEmail', userData.email);
+        toast.success("Login Successful!");
+        window.dispatchEvent(new Event('authChange'));
+        navigate('/');
+        
       } else {
-        setError("Login Failed: Staff profile not found in database.");
-        auth.signOut();
+        toast.error("Login Failed: Staff profile not found in database.");
+        await auth.signOut();
       }
     } catch (err) {
-      console.error("Login Error:", err);
-      setError("Invalid email or password.");
+      toast.error("Login Error: " + err.message);
+      setError("Failed to sign in. Please check your credentials.");
     } finally {
       setLoading(false);
     }

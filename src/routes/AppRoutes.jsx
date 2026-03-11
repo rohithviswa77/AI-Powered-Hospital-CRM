@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 
@@ -19,7 +19,21 @@ import CrmSettings from '../pages/CrmSettings/CrmSettings';
 
 const AppRoutes = () => {
   // Authentication check using staff unique ID
-  const isAuthenticated = !!localStorage.getItem('staffUID');
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('staffUID'));
+
+  useEffect(() => {
+    const handleAuthChange = () => {
+      setIsAuthenticated(!!localStorage.getItem('staffUID'));
+    };
+
+    window.addEventListener('authChange', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+
+    return () => {
+      window.removeEventListener('authChange', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
+  }, []);
 
   return (
     <Routes>

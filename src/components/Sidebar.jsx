@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { auth, db } from '../services/firebaseConfig';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
+import { toast } from 'react-toastify';
 
 const Sidebar = () => {
   const navigate = useNavigate();
@@ -26,11 +28,15 @@ const Sidebar = () => {
 
   const handleLogout = async () => {
     try {
-      await auth.signOut();
-      localStorage.clear();
-      navigate('/login');
+      await signOut(auth);
+      localStorage.removeItem('staffUID');
+      localStorage.removeItem('staffRole');
+      localStorage.removeItem('staffEmail');
+      toast.info("Logged out successfully.");
+      window.dispatchEvent(new Event('authChange'));
+      navigate('/');
     } catch (error) {
-      console.error("Logout failed", error);
+      toast.error("Logout failed: " + error.message);
     }
   };
 

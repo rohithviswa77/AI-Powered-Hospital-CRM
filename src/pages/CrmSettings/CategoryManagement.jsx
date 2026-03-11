@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import { toast } from 'react-toastify';
 
 const CategoryManagement = () => {
   const [categoryTab, setCategoryTab] = useState('sources');
@@ -47,7 +48,7 @@ const CategoryManagement = () => {
 
     // Require location selection if tab configuration requires it
     if (currentConfig.hasLocation && !newLocation) {
-      alert(`Please select a location for this ${currentConfig.label.slice(0, -1)}.`);
+      toast.warning(`Please select a location for this ${currentConfig.label.slice(0, -1)}.`);
       return;
     }
 
@@ -66,8 +67,9 @@ const CategoryManagement = () => {
       setNewItem('');
       setNewDescription('');
       setNewLocation('');
+      toast.success(`${currentConfig.label.slice(0, -1)} added successfully!`);
     } catch (error) {
-      console.error("Error:", error);
+      toast.error("Error adding category: " + error.message);
     }
   };
 
@@ -82,8 +84,9 @@ const CategoryManagement = () => {
 
       await updateDoc(doc(db, currentConfig.collection, id), dataToUpdate);
       setEditingId(null);
+      toast.success(`${currentConfig.label.slice(0, -1)} updated successfully!`);
     } catch (error) {
-      console.error(error);
+      toast.error("Error updating category: " + error.message);
     }
   };
 
@@ -91,8 +94,9 @@ const CategoryManagement = () => {
     if (window.confirm(`Are you sure you want to delete "${name}"?`)) {
       try {
         await deleteDoc(doc(db, currentConfig.collection, id));
+        toast.success(`${currentConfig.label.slice(0, -1)} deleted successfully!`);
       } catch (error) {
-        console.error(error);
+        toast.error("Error deleting category: " + error.message);
       }
     }
   };
@@ -226,9 +230,9 @@ const CategoryManagement = () => {
                           setEditValue(item.name);
                           setEditDescription(item.description || '');
                           setEditLocation(item.location || locations[0]);
-                        }} className="px-3 py-1 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded text-sm font-medium transition-colors">Edit</button>
+                        }} className="px-3 py-1 bg-emerald-50 text-indigo-600 hover:bg-emerald-100 rounded text-sm font-medium transition-colors">Edit</button>
                       )}
-                      <button onClick={() => handleDelete(item.id, item.name)} className="px-3 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-sm font-medium transition-colors">Delete</button>
+                      <button onClick={() => handleDelete(item.id, item.name)} className="px-3 py-1 bg-emerald-50 text-red-600 hover:bg-emerald-100 rounded text-sm font-medium transition-colors">Delete</button>
                     </div>
                   </td>
                 </tr>

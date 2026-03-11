@@ -69,4 +69,44 @@
   .section-title {
     @apply text-xl lg:text-2xl font-bold text-neutral-800 mb-5 flex items-center gap-2;
   }
+
+  /* React Toastify Premium Overrides */
+  :root {
+    --toastify-color-info: #14b8a6;
+    --toastify-color-success: #10b981;
+    --toastify-color-warning: #f59e0b;
+    --toastify-color-error: #ef4444;
+    --toastify-toast-bd-radius: 16px;
+    --toastify-font-family: inherit;
+    --toastify-text-color-light: #1e293b;
+  }
+
+  .Toastify__toast {
+    @apply !bg-white/95 !backdrop-blur-xl !border !border-neutral-100 !shadow-float;
+  }
+
+  .Toastify__toast-body {
+    @apply font-medium tracking-tight text-sm text-neutral-800;
+  }
+  
+  .Toastify__progress-bar {
+    height: 4px !important;
+  }
+
+  .Toastify__progress-bar--success {
+    @apply !bg-gradient-to-r !from-primary-400 !to-primary-600;
+  }
+  .Toastify__progress-bar--error {
+    @apply !bg-gradient-to-r !from-red-400 !to-red-600;
+  }
+  .Toastify__progress-bar--info {
+    @apply !bg-gradient-to-r !from-secondary-400 !to-secondary-600;
+  }
+  .Toastify__progress-bar--warning {
+    @apply !bg-gradient-to-r !from-amber-400 !to-amber-600;
+  }
+  
+  .Toastify__close-button {
+    @apply text-neutral-400 hover:text-neutral-700 transition-colors mt-1;
+  }
 }

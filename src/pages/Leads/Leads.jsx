@@ -6,6 +6,8 @@ import {
   where, getDocs
 } from 'firebase/firestore';
 import AddLead from './AddLead';
+import { toast } from 'react-toastify';
+
 
 const LOCATIONS = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
 
@@ -23,7 +25,7 @@ export default function Leads() {
       setLeads(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     }, (error) => {
-      console.error("Error fetching leads:", error);
+      toast.error("Error fetching leads: " + error.message);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -54,10 +56,10 @@ export default function Leads() {
         await Promise.all(deleteFollowUps);
 
         await deleteDoc(doc(db, "leads", lead.id));
-        alert(`Successfully converted! New Patient ID: ${newPatientID}`);
+        toast.success(`Successfully converted! New Patient ID: ${newPatientID}`);
       } catch (error) {
-        console.error("Error converting lead:", error);
-        alert("Failed to complete conversion.");
+        toast.error("Error converting lead: " + error.message);
+        toast.error("Failed to complete conversion.");
       }
     }
   };
@@ -66,8 +68,9 @@ export default function Leads() {
     if (window.confirm("Are you sure you want to delete this lead?")) {
       try {
         await deleteDoc(doc(db, "leads", leadId));
+        toast.success("Lead record deleted successfully.");
       } catch (error) {
-        console.error("Error deleting lead:", error);
+        toast.error("Error deleting lead: " + error.message);
       }
     }
   };
@@ -202,7 +205,7 @@ export default function Leads() {
                       <span className={`inline-flex px-2 py-1 rounded text-xs font-semibold
                         ${lead.priority === 'High' ? 'bg-red-100 text-red-700' : ''}
                         ${lead.priority === 'Urgent' ? 'bg-rose-500 text-white' : ''}
-                        ${lead.priority === 'Low' ? 'bg-neutral-100 text-neutral-700' : ''}
+                        ${lead.priority === 'Low' ? 'bg-green-100 text-neutral-700' : ''}
                         ${lead.priority === 'Normal' || !['High', 'Urgent', 'Low'].includes(lead.priority) ? 'bg-blue-50 text-blue-700' : ''}
                       `}>
                         {lead.priority || 'Normal'}

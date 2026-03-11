@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, addDoc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { toast } from "react-toastify";
 
 const AddOutreachLog = ({ onClose }) => {
   const [people, setPeople] = useState([]); // Combined Leads and Patients
@@ -36,8 +37,11 @@ const AddOutreachLog = ({ onClose }) => {
     return () => { unsubLeads(); unsubStaff(); };
   }, []);
 
-  const handleAISummarize = async () => {
-    if (!formData.rawNotes) return alert("Please enter conversation notes first.");
+  const handleSummarize = async () => {
+    if (!formData.rawNotes) {
+      toast.warning("Please enter conversation notes first.");
+      return;
+    }
 
     setIsSummarizing(true);
     try {
@@ -53,9 +57,10 @@ const AddOutreachLog = ({ onClose }) => {
       const text = response.text();
 
       setFormData({ ...formData, aiSummary: text.trim() });
+      toast.success("AI Summarization Complete!");
     } catch (error) {
-      console.error("AI Summarization failed:", error);
-      alert(`AI Error: ${error.message}`);
+      toast.error("AI Summarization failed: " + error.message);
+      toast.error(`AI Error: ${error.message}`);
     } finally {
       setIsSummarizing(false);
     }
@@ -149,18 +154,18 @@ const AddOutreachLog = ({ onClose }) => {
 
             <button
               type="button"
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold transition-all border border-dashed text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={handleAISummarize}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold transition-all border border-dashed text-primary-600 bg-primary-50 border-primary-200 hover:bg-primary-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleSummarize}
               disabled={isSummarizing || !formData.rawNotes}
             >
-              <span className="text-lg leading-none -mt-1">✨</span>
+              <span className="text-lg leading-none -mt-1"></span>
               {isSummarizing ? "AI Summarizing..." : "Generate Smart Summary"}
             </button>
 
             {formData.aiSummary && (
-              <div className="bg-indigo-50/50 border-l-4 border-indigo-500 rounded-r-xl p-4 animate-fade-in shadow-sm">
-                <p className="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-2">AI Smart Summary</p>
-                <p className="text-sm font-medium text-indigo-950 leading-relaxed">{formData.aiSummary}</p>
+              <div className="bg-primary-50/50 border-l-4 border-primary-500 rounded-r-xl p-4 animate-fade-in shadow-sm">
+                <p className="text-xs font-bold text-primary-900 uppercase tracking-wider mb-2">AI Smart Summary</p>
+                <p className="text-sm font-medium text-primary-950 leading-relaxed">{formData.aiSummary}</p>
               </div>
             )}
 
