@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { auth, db } from '../../../services/firebaseConfig';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { useAuth } from '../../../context/AuthContext';
 import { toast } from 'react-toastify';
 
 const SignIn = () => {
@@ -10,6 +8,7 @@ const SignIn = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
@@ -18,36 +17,13 @@ const SignIn = () => {
     setLoading(true);
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const uid = userCredential.user.uid;
-
-      const userDocRef = doc(db, "users", uid);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-
-        if (userData.status === 'Inactive') {
-          toast.error("Your account has been deactivated. Please contact an administrator.");
-          await auth.signOut();
-          setLoading(false);
-          return;
-        }
-
-        localStorage.setItem('staffUID', userData.uid);
-        localStorage.setItem('staffRole', userData.role);
-        localStorage.setItem('staffEmail', userData.email);
-        toast.success("Login Successful!");
-        window.dispatchEvent(new Event('authChange'));
-        navigate('/');
-        
-      } else {
-        toast.error("Login Failed: Staff profile not found in database.");
-        await auth.signOut();
-      }
+      await login(email, password);
+      toast.success("Login Successful!");
+      // Navigation is handled by AppRoutes/AuthContext state change
     } catch (err) {
-      toast.error("Login Error: " + err.message);
+      console.error("Login component error:", err);
       setError("Failed to sign in. Please check your credentials.");
+      toast.error("Login Error: " + err.message);
     } finally {
       setLoading(false);
     }

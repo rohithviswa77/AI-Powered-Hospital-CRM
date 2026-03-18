@@ -1,40 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { auth, db } from '../services/firebaseConfig';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
+import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 
 const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [allowedItems, setAllowedItems] = useState([]);
-  const [staffRole, setStaffRole] = useState('');
-
-  useEffect(() => {
-    const uid = localStorage.getItem('staffUID');
-    if (!uid) return;
-
-    const unsubscribe = onSnapshot(doc(db, "users", uid), (docSnap) => {
-      if (docSnap.exists()) {
-        const userData = docSnap.data();
-        setAllowedItems(userData.allowedNav || []);
-        setStaffRole(userData.role || 'Staff');
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
+  const { userProfile, logout } = useAuth();
+  
+  const allowedItems = userProfile?.allowedNav || [];
+  const staffRole = userProfile?.role || 'Staff';
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
-      localStorage.removeItem('staffUID');
-      localStorage.removeItem('staffRole');
-      localStorage.removeItem('staffEmail');
+      await logout();
       toast.info("Logged out successfully.");
-      window.dispatchEvent(new Event('authChange'));
-      navigate('/');
+      navigate('/login');
     } catch (error) {
       toast.error("Logout failed: " + error.message);
     }
@@ -47,10 +28,13 @@ const Sidebar = () => {
     { name: "Patients", path: "/patients" },
     { name: "Outreach Log", path: "/outreach-log" },
     { name: "Appointments", path: "/appointments" },
-    { name: "CRM Settings", path: "/crm-settings" }
+    { name: "CRM Settings", path: "/crm-settings" },
+    { name: "My Profile", path: "/profile" }
   ];
 
-  const filteredMenu = allMenuItems.filter(item => allowedItems.includes(item.name));
+  const filteredMenu = allMenuItems.filter(item => 
+    item.name === "My Profile" || allowedItems.includes(item.name)
+  );
 
   return (
     <div className="w-64 h-screen bg-primary-950/95 backdrop-blur-xl border-r border-white/10 text-white flex flex-col sticky top-0 shrink-0 shadow-2xl relative overflow-hidden z-20">
@@ -62,14 +46,21 @@ const Sidebar = () => {
           Herbally
           <span className="text-xs font-semibold text-primary-200 tracking-normal opacity-80 normal-case">CRM System</span>
         </h2>
-        <div className="mt-4 flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-          </span>
-          <div className="text-xs font-medium text-emerald-100/80">
-            {staffRole}
+        <div className="mt-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <div className="text-xs font-medium text-emerald-100/80">
+              {staffRole}
+            </div>
           </div>
+          <Link to="/profile" className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-emerald-300 transition-colors border border-white/5" title="View Profile">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </Link>
         </div>
       </div>
 

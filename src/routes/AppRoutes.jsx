@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '../components/Layout';
+import { useAuth } from '../context/AuthContext';
 
 // Auth Pages
 import SignIn from '../pages/Auth/SignIn/SignIn';
@@ -11,34 +12,26 @@ import Dashboard from '../pages/Dashboard/Dashboard';
 import Leads from '../pages/Leads/Leads';
 import FollowUps from '../pages/FollowUps/FollowUps';
 import Patients from '../pages/Patients/Patients';
-// UPDATED: Import name matches the renamed module
 import OutreachLog from '../pages/OutreachLog/OutreachLog';
 import Appointments from '../pages/Appointments/Appointments';
-// Consolidated Admin Module
 import CrmSettings from '../pages/CrmSettings/CrmSettings';
+import Profile from '../pages/Profile/Profile';
 
 const AppRoutes = () => {
-  // Authentication check using staff unique ID
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('staffUID'));
+  const { isAuthenticated, loading } = useAuth();
 
-  useEffect(() => {
-    const handleAuthChange = () => {
-      setIsAuthenticated(!!localStorage.getItem('staffUID'));
-    };
-
-    window.addEventListener('authChange', handleAuthChange);
-    window.addEventListener('storage', handleAuthChange);
-
-    return () => {
-      window.removeEventListener('authChange', handleAuthChange);
-      window.removeEventListener('storage', handleAuthChange);
-    };
-  }, []);
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-neutral-900 flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-primary-500/20 border-t-primary-500 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <Routes>
       {/* --- Public Routes --- */}
-      <Route path="/login" element={<SignIn />} />
+      <Route path="/login" element={!isAuthenticated ? <SignIn /> : <Navigate to="/" />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* --- Protected Routes (Wrapped in Layout) --- */}
@@ -63,11 +56,11 @@ const AppRoutes = () => {
         element={isAuthenticated ? <Layout><Patients /></Layout> : <Navigate to="/login" />}
       />
 
-      {/* UPDATED: Lowercase path for cleaner URL navigation */}
       <Route
         path="/outreach-log"
         element={isAuthenticated ? <Layout><OutreachLog /></Layout> : <Navigate to="/login" />}
       />
+      
       <Route
       path="/appointments"
       element={isAuthenticated ? <Layout><Appointments /></Layout> : <Navigate to="/login" />}
@@ -78,10 +71,15 @@ const AppRoutes = () => {
         element={isAuthenticated ? <Layout><CrmSettings /></Layout> : <Navigate to="/login" />}
       />
 
+      <Route
+        path="/profile"
+        element={isAuthenticated ? <Layout><Profile /></Layout> : <Navigate to="/login" />}
+      />
+
       {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} />} />
     </Routes>
   );
 };
 
-export default AppRoutes;
+export default AppRoutes;
