@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../services/firebaseConfig';
-import { collection, onSnapshot, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import AddFollowUp from './AddFollowUp';
+import LeadProfileDrawer from '../Leads/LeadProfileDrawer';
 import { toast } from 'react-toastify';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
@@ -15,8 +16,11 @@ export default function FollowUps() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingFollowUp, setEditingFollowUp] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState('All location');
-  const [selectedStatus, setSelectedStatus] = useState('All statuses');
+  const [viewTab, setViewTab] = useState('active'); // 'active' | 'completed'
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [viewingProfile, setViewingProfile] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, "followups"), orderBy("createdAt", "desc"));
@@ -104,20 +108,60 @@ export default function FollowUps() {
   };
 
   const filteredFollowUps = useMemo(() => {
-    return followUps.filter(f => {
-      const matchesLocation = selectedLocation === 'All location' ||
-        f.department === selectedLocation;
+    const filtered = followUps.filter(f => {
+      const matchesLocation = selectedLocation === 'All location' || f.department === selectedLocation;
         
-      const matchesStatus = selectedStatus === 'All statuses' || f.status === selectedStatus;
+      const matchesTab = viewTab === 'active' 
+        ? f.status !== 'Completed' 
+        : f.status === 'Completed';
 
       const matchesSearch =
         f.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         f.leadName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         f.customerLead?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      return matchesLocation && matchesStatus && matchesSearch;
+      return matchesLocation && matchesTab && matchesSearch;
     });
-  }, [followUps, selectedLocation, selectedStatus, searchTerm]);
+
+    // Calculate active balance per lead
+    const activeCounts = new Map();
+    followUps.forEach(f => {
+      if (f.status !== 'Completed') {
+        activeCounts.set(f.customerLead, (activeCounts.get(f.customerLead) || 0) + 1);
+      }
+    });
+
+    // Group by lead so only one row appears per lead
+    const map = new Map();
+    filtered.forEach(f => {
+      if (!map.has(f.customerLead)) {
+        map.set(f.customerLead, { ...f, taskBalance: activeCounts.get(f.customerLead) || 0 });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [followUps, selectedLocation, viewTab, searchTerm]);
+
+  const handleRowClick = async (leadId) => {
+    if (!leadId) return;
+    setLoadingProfile(true);
+    try {
+      let snap = await getDoc(doc(db, "leads", leadId));
+      if (!snap.exists()) {
+        snap = await getDoc(doc(db, "patients", leadId)); // Check if transitioned
+      }
+      
+      if (snap.exists()) {
+        setViewingProfile({ id: snap.id, ...snap.data() });
+      } else {
+        toast.warning("Lead record no longer exists or was deleted.");
+      }
+    } catch (e) {
+      toast.error("Failed to load profile details.");
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
 
   const stats = useMemo(() => {
     return {
@@ -158,16 +202,24 @@ export default function FollowUps() {
             ))}
           </select>
 
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="w-full sm:max-w-[130px]"
-          >
-            <option value="All statuses">All Statuses</option>
-            <option value="Open">Open</option>
-            <option value="In-Progress">In-Progress</option>
-            <option value="Completed">Completed</option>
-          </select>
+          <div className="flex bg-neutral-100 p-1 rounded-lg border border-neutral-200">
+            <button
+              onClick={() => setViewTab('active')}
+              className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${
+                viewTab === 'active' ? 'bg-white shadow-sm text-primary-700' : 'text-neutral-500 hover:text-neutral-800'
+              }`}
+            >
+              Active
+            </button>
+            <button
+              onClick={() => setViewTab('completed')}
+              className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-colors ${
+                viewTab === 'completed' ? 'bg-white shadow-sm text-primary-700' : 'text-neutral-500 hover:text-neutral-800'
+              }`}
+            >
+              Completed History
+            </button>
+          </div>
 
           <div className="flex gap-2">
             <button 
@@ -208,6 +260,20 @@ export default function FollowUps() {
         />
       )}
 
+      {viewingProfile && (
+        <LeadProfileDrawer 
+          lead={viewingProfile}
+          onClose={() => setViewingProfile(null)}
+          // Not passing onEditLead here since we are in FollowUps and not Leads page
+        />
+      )}
+
+      {loadingProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/50 backdrop-blur-sm">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        </div>
+      )}
+
       <div className="card border-neutral-200">
         <div className="overflow-x-auto w-full max-w-full">
           <table className="w-full text-left whitespace-nowrap lg:whitespace-normal min-w-max">
@@ -228,7 +294,11 @@ export default function FollowUps() {
                 <tr><td colSpan="8" className="p-8 text-center text-neutral-500 font-medium">Loading data...</td></tr>
               ) : filteredFollowUps.length > 0 ? (
                 filteredFollowUps.map((f) => (
-                  <tr key={f.id} className="hover:bg-neutral-50 transition-colors">
+                  <tr 
+                    key={f.id} 
+                    className="hover:bg-neutral-50 transition-colors cursor-pointer"
+                    onClick={() => handleRowClick(f.customerLead)}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <button
@@ -247,7 +317,14 @@ export default function FollowUps() {
                         </button>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm font-semibold text-neutral-900 break-words">{f.title}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-neutral-900 break-words">
+                      {f.title}
+                      {f.taskBalance > 1 && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary-50 text-primary-700 border border-primary-200 uppercase tracking-widest whitespace-nowrap">
+                          {f.taskBalance - 1} More Task{f.taskBalance > 2 ? 's' : ''}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-sm text-neutral-700 break-words">{f.leadName}</td>
                     <td className="px-4 py-3 text-sm text-neutral-600">{f.assignedTo}</td>
                     <td className="px-4 py-3">

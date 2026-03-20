@@ -24,7 +24,6 @@ const CategoryManagement = () => {
   // Configuration for all tabs
   const catConfig = {
     sources: { collection: 'sources', label: 'Lead Sources', placeholder: 'e.g. Facebook', hasDesc: false, hasLocation: false },
-    lifeStages: { collection: 'lifeStages', label: 'Life Stages', placeholder: 'e.g. Dr Consultation', hasDesc: false, hasLocation: false },
     leadCategories: { collection: 'leadCategories', label: 'Lead Categories', placeholder: 'e.g. DIABETES', hasDesc: false, hasLocation: false },
     followUpCategories: { collection: 'followUpCategories', label: 'Follow-up Types', placeholder: 'e.g. Call', hasDesc: false, hasLocation: false },
     staffMembers: { collection: 'staffMembers', label: 'Staff / Assignees', placeholder: 'e.g. John Doe', hasDesc: true, descPlaceholder: 'Role (e.g. Receptionist)', hasLocation: true },

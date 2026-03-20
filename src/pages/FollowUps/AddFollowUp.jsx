@@ -3,7 +3,7 @@ import { db } from '../../services/firebaseConfig';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { toast } from 'react-toastify';
 
-const AddFollowUp = ({ onClose, editData }) => {
+const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, prefilledDepartment }) => {
   const [staffMembers, setStaffMembers] = useState([]);
   const [leads, setLeads] = useState([]);
   const [followUpCategories, setFollowUpCategories] = useState([]);
@@ -11,9 +11,9 @@ const AddFollowUp = ({ onClose, editData }) => {
   const [formData, setFormData] = useState(editData || {
     title: '',
     status: 'Open',
-    customerLead: '', // This will store the Lead ID
-    leadName: '',     // NEW: Added to store the name for the table view
-    department: '',   // NEW: Added to store the branch for filtering
+    customerLead: prefilledLeadId || '', // This will store the Lead ID
+    leadName: prefilledLeadName || '',   // NEW: Added to store the name for the table view
+    department: prefilledDepartment || '', // Auto-capture the branch
     assignedTo: '',
     followupCategory: '',
     nextFollowUpDate: '',
@@ -22,6 +22,13 @@ const AddFollowUp = ({ onClose, editData }) => {
   });
 
   const [loading, setLoading] = useState(false);
+
+  // CRITICAL: Force form to update if editData changes while modal is already mounted
+  useEffect(() => {
+    if (editData) {
+      setFormData(editData);
+    }
+  }, [editData]);
 
   useEffect(() => {
     const unsubStaff = onSnapshot(collection(db, "staffMembers"), (snapshot) => {
@@ -119,6 +126,7 @@ const AddFollowUp = ({ onClose, editData }) => {
                   value={formData.customerLead}
                   onChange={handleLeadChange}
                   required
+                  disabled={!!prefilledLeadId} // Lock dropdown if opened from a specific lead drawer
                 >
                   <option value="" disabled>Select Customer/Lead</option>
                   {leads.map(lead => (

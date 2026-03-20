@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
-import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, orderBy, getDocs, where, writeBatch, deleteDoc, setDoc, deleteField } from 'firebase/firestore';
 import { toast } from 'react-toastify';
 
 const AddLead = ({ onClose, leadData }) => {
   const [sources, setSources] = useState([]);
-  const [lifeStages, setLifeStages] = useState([]);
   const [leadCategories, setLeadCategories] = useState([]);
   const [staff, setStaff] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -19,7 +18,7 @@ const AddLead = ({ onClose, leadData }) => {
     mobile: '',
     email: '',
     leadCategory: '',
-    priority: 'Normal',
+    priority: 'Medium',
     source: '',
     lifeStage: '',
     department: '',
@@ -30,9 +29,6 @@ const AddLead = ({ onClose, leadData }) => {
     const unsubSources = onSnapshot(collection(db, "sources"), (snap) => {
       setSources(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
-    const unsubLifeStages = onSnapshot(collection(db, "lifeStages"), (snap) => {
-      setLifeStages(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
     const unsubCategories = onSnapshot(query(collection(db, "leadCategories"), orderBy("name", "asc")), (snap) => {
       setLeadCategories(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
@@ -41,7 +37,7 @@ const AddLead = ({ onClose, leadData }) => {
     });
 
     return () => {
-      unsubSources(); unsubLifeStages(); unsubCategories(); unsubStaff();
+      unsubSources(); unsubCategories(); unsubStaff();
     };
   }, []);
 
@@ -58,6 +54,82 @@ const AddLead = ({ onClose, leadData }) => {
         const updateData = { ...formData };
         delete updateData.id;
         await updateDoc(leadRef, updateData);
+
+        // SYNC FOLLOW-UPS: Propagate name and department changes
+        const newLeadName = `${formData.firstName} ${formData.lastName}`;
+        const oldLeadName = `${leadData.firstName} ${leadData.lastName}`;
+        if (newLeadName !== oldLeadName || formData.department !== leadData.department) {
+          const followUpQuery = query(collection(db, "followups"), where("customerLead", "==", leadData.id));
+          const followUpSnap = await getDocs(followUpQuery);
+          if (!followUpSnap.empty) {
+            const batch = writeBatch(db);
+            followUpSnap.forEach((fDoc) => {
+              batch.update(fDoc.ref, { 
+                leadName: newLeadName, 
+                department: formData.department 
+              });
+            });
+            await batch.commit();
+          }
+        }
+
+        // STAGE CHANGE AUTOMATION (Syncs with Drag-and-Drop hooks)
+        const oldStage = leadData.lifeStage;
+        const newStage = formData.lifeStage;
+        
+        if (oldStage !== newStage) {
+          if (newStage === 'Converted') {
+            const patientRef = doc(db, "patients", leadData.id);
+            const newPatientID = leadData.patientID || `PAT-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+            await setDoc(patientRef, {
+              ...formData,
+              patientID: newPatientID,
+              patientStatus: "Active",
+              convertedAt: serverTimestamp()
+            });
+            if (!leadData.patientID) {
+              await updateDoc(leadRef, { patientID: newPatientID });
+            }
+          } else if (newStage === 'Lost') {
+            const followUpQuery = query(collection(db, "followups"), where("customerLead", "==", leadData.id));
+            const followUpSnap = await getDocs(followUpQuery);
+            const batch = writeBatch(db);
+            followUpSnap.forEach((fDoc) => {
+              if (fDoc.data().status !== 'Completed') {
+                batch.update(fDoc.ref, { 
+                  status: 'Completed',
+                  autoCompletedOnLost: true,
+                  previousStatus: fDoc.data().status
+                });
+              }
+            });
+            await batch.commit();
+            
+            if (oldStage === 'Converted') {
+              await deleteDoc(doc(db, "patients", leadData.id));
+            }
+          } else {
+            if (oldStage === 'Converted') {
+              await deleteDoc(doc(db, "patients", leadData.id));
+            }
+            if (oldStage === 'Lost') {
+              const followUpQuery = query(collection(db, "followups"), where("customerLead", "==", leadData.id));
+              const followUpSnap = await getDocs(followUpQuery);
+              const batch = writeBatch(db);
+              followUpSnap.forEach((fDoc) => {
+                if (fDoc.data().autoCompletedOnLost === true) {
+                  batch.update(fDoc.ref, { 
+                    status: fDoc.data().previousStatus || 'Open',
+                    autoCompletedOnLost: deleteField(),
+                    previousStatus: deleteField()
+                  });
+                }
+              });
+              await batch.commit();
+            }
+          }
+        }
+
         toast.success("Lead Updated Successfully!");
       } else {
         const newLeadData = {
@@ -158,9 +230,8 @@ const AddLead = ({ onClose, leadData }) => {
                     <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">Priority</label>
                     <select name="priority" onChange={handleChange} value={formData.priority}>
                       <option value="Low">Low</option>
-                      <option value="Normal">Normal</option>
+                      <option value="Medium">Medium</option>
                       <option value="High">High</option>
-                      <option value="Urgent">Urgent</option>
                     </select>
                   </div>
                 </div>
@@ -178,9 +249,10 @@ const AddLead = ({ onClose, leadData }) => {
                     <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">Life Stage *</label>
                     <select name="lifeStage" required onChange={handleChange} value={formData.lifeStage}>
                       <option value="">Select</option>
-                      {lifeStages.map((stage) => (
-                        <option key={stage.id} value={stage.name}>{stage.name}</option>
-                      ))}
+                      <option value="New Enquiry">New Enquiry</option>
+                      <option value="Contacted">Contacted</option>
+                      <option value="Converted">Converted</option>
+                      <option value="Lost">Lost</option>
                     </select>
                   </div>
                 </div>

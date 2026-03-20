@@ -2,14 +2,27 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../services/firebaseConfig';
 import {
   collection, onSnapshot, query, orderBy,
-  doc, deleteDoc, setDoc, serverTimestamp,
-  where, getDocs
+  doc, deleteDoc, updateDoc, setDoc, serverTimestamp,
+  where, getDocs, deleteField
 } from 'firebase/firestore';
 import AddLead from './AddLead';
+import LeadsKanban from './LeadsKanban';
+import LeadProfileDrawer from './LeadProfileDrawer';
 import { toast } from 'react-toastify';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+
+const TAMIL_MALAYALAM_NAMES = [
+  { f: 'Murugan', l: 'Pillai' }, { f: 'Karthik', l: 'Raj' }, { f: 'Anand', l: 'Nair' },
+  { f: 'Saravanan', l: 'Iyer' }, { f: 'Senthil', l: 'Kumar' }, { f: 'Ramesh', l: 'Menon' },
+  { f: 'Sivakumar', l: 'Panicker' }, { f: 'Prakash', l: 'Varghese' }, { f: 'Balaji', l: 'Thomas' },
+  { f: 'Aravind', l: 'Swamy' }, { f: 'Ashok', l: 'Reddy' }, { f: 'Vignesh', l: 'Rao' },
+  { f: 'Dhanush', l: 'Gounder' }, { f: 'Surya', l: 'Thevar' }, { f: 'Madhavan', l: 'Nambiar' },
+  { f: 'Prithviraj', l: 'Sukumaran' }, { f: 'Dulquer', l: 'Salmaan' }, { f: 'Fahadh', l: 'Faasil' },
+  { f: 'Nivin', l: 'Pauly' }, { f: 'Tovino', l: 'Thomas' }, { f: 'Vijay', l: 'Sethupathi' },
+  { f: 'Kamal', l: 'Haasan' }, { f: 'Rajini', l: 'Kanth' }, { f: 'Ajith', l: 'Kumar' }
+];
 
 
 const LOCATIONS = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
@@ -19,9 +32,11 @@ export default function Leads() {
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingLead, setEditingLead] = useState(null);
+  const [viewingProfile, setViewingProfile] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('All location');
   const [selectedLifeStage, setSelectedLifeStage] = useState('All stages');
+  const [viewMode, setViewMode] = useState('kanban'); // 'table' | 'kanban'
 
   useEffect(() => {
     const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
@@ -36,35 +51,37 @@ export default function Leads() {
   }, []);
 
   const handleConvertToPatient = async (lead) => {
-    const confirmMsg = `Convert ${lead.firstName} to a Patient? \n\nThis will: \n1. Generate a new Patient ID \n2. Remove associated follow-ups \n3. Remove from leads list.`;
+    if (lead.lifeStage === "Converted") {
+      toast.info("Lead is already converted!");
+      return;
+    }
+    
+    // Optimistic UI update
+    setLeads(prevLeads => prevLeads.map(l => 
+      l.id === lead.id ? { ...l, lifeStage: 'Converted' } : l
+    ));
 
-    if (window.confirm(confirmMsg)) {
-      try {
-        const newPatientID = `PAT-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-        const patientRef = doc(db, "patients", lead.id);
+    try {
+      await updateDoc(doc(db, "leads", lead.id), { lifeStage: 'Converted' });
+      
+      const patientRef = doc(db, "patients", lead.id);
+      const newPatientID = lead.patientID || `PAT-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+      
+      await setDoc(patientRef, {
+        ...lead,
+        patientID: newPatientID,
+        lifeStage: "Converted",
+        patientStatus: "Active",
+        convertedAt: serverTimestamp()
+      });
 
-        await setDoc(patientRef, {
-          ...lead,
-          patientID: newPatientID,
-          lifeStage: "Converted",
-          patientStatus: "Active",
-          convertedAt: serverTimestamp()
-        });
-
-        const followUpQuery = query(
-          collection(db, "followups"),
-          where("customerLead", "==", lead.id)
-        );
-        const followUpSnap = await getDocs(followUpQuery);
-        const deleteFollowUps = followUpSnap.docs.map(fDoc => deleteDoc(fDoc.ref));
-        await Promise.all(deleteFollowUps);
-
-        await deleteDoc(doc(db, "leads", lead.id));
-        toast.success(`Successfully converted! New Patient ID: ${newPatientID}`);
-      } catch (error) {
-        toast.error("Error converting lead: " + error.message);
-        toast.error("Failed to complete conversion.");
+      if (!lead.patientID) {
+        await updateDoc(doc(db, "leads", lead.id), { patientID: newPatientID });
       }
+      
+      toast.success(`Successfully converted!`);
+    } catch (error) {
+      toast.error("Error converting lead: " + error.message);
     }
   };
 
@@ -75,6 +92,93 @@ export default function Leads() {
         toast.success("Lead record deleted successfully.");
       } catch (error) {
         toast.error("Error deleting lead: " + error.message);
+      }
+    }
+  };
+
+  const handleDragEnd = async (result) => {
+    if (!result.destination) return;
+    const { source, destination, draggableId } = result;
+
+    if (source.droppableId !== destination.droppableId) {
+      const newStage = destination.droppableId;
+      const lead = leads.find(l => l.id === draggableId);
+      
+      // Optimistic UI update
+      setLeads(prevLeads => prevLeads.map(l => 
+        l.id === draggableId ? { ...l, lifeStage: newStage } : l
+      ));
+
+      try {
+        await updateDoc(doc(db, "leads", draggableId), { lifeStage: newStage });
+        
+        if (newStage === 'Converted') {
+          // Add or update to Patients collection (no confirm needed)
+          const patientRef = doc(db, "patients", lead.id);
+          const newPatientID = lead.patientID || `PAT-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+          
+          await setDoc(patientRef, {
+            ...lead,
+            patientID: newPatientID,
+            lifeStage: "Converted",
+            patientStatus: "Active",
+            convertedAt: serverTimestamp()
+          });
+
+          // Also save the patientID back to the lead so it's consistent if they drag it out and back in
+          if (!lead.patientID) {
+            await updateDoc(doc(db, "leads", lead.id), { patientID: newPatientID });
+          }
+          
+          toast.success(`Synced to Patients list!`);
+        } else if (newStage === 'Lost') {
+          // Auto-complete all open follow-ups
+          const followUpQuery = query(collection(db, "followups"), where("customerLead", "==", lead.id));
+          const followUpSnap = await getDocs(followUpQuery);
+          
+          const completionPromises = followUpSnap.docs
+            .filter(doc => doc.data().status !== 'Completed')
+            .map(docRef => updateDoc(docRef.ref, { 
+              status: 'Completed',
+              autoCompletedOnLost: true,
+              previousStatus: docRef.data().status
+            }));
+            
+          await Promise.all(completionPromises);
+          
+          if (source.droppableId === 'Converted') {
+            await deleteDoc(doc(db, "patients", lead.id));
+          }
+          
+          toast.success(`Moved to Lost. Auto-completed active tasks.`);
+        } else {
+          // If moved OUT of Converted, remove from Patients collection
+          if (source.droppableId === 'Converted') {
+            await deleteDoc(doc(db, "patients", lead.id));
+            toast.info(`Removed from Patients list.`);
+          } 
+          
+          // If moved OUT of Lost, Re-open auto-completed tasks
+          if (source.droppableId === 'Lost') {
+            const followUpQuery = query(collection(db, "followups"), where("customerLead", "==", lead.id));
+            const followUpSnap = await getDocs(followUpQuery);
+            
+            const reopenPromises = followUpSnap.docs
+              .filter(doc => doc.data().autoCompletedOnLost === true)
+              .map(docRef => updateDoc(docRef.ref, { 
+                status: docRef.data().previousStatus || 'Open',
+                autoCompletedOnLost: deleteField(),
+                previousStatus: deleteField()
+              }));
+              
+            await Promise.all(reopenPromises);
+            toast.success(`Restored active tasks.`);
+          } else {
+            toast.success(`Moved to ${newStage}`);
+          }
+        }
+      } catch (err) {
+        toast.error("Failed to move lead. " + err.message);
       }
     }
   };
@@ -154,7 +258,7 @@ export default function Leads() {
   const stats = useMemo(() => {
     return {
       total: filteredLeads.length,
-      highPriority: filteredLeads.filter(l => l.priority === 'High').length,
+      highPriority: filteredLeads.filter(l => l.priority === 'High' && l.lifeStage !== 'Lost').length,
       newEnquiry: filteredLeads.filter(l => l.lifeStage === 'New Enquiry').length
     };
   }, [filteredLeads]);
@@ -167,36 +271,62 @@ export default function Leads() {
           <p className="text-sm font-medium text-neutral-500">Manage and track potential patient enquiries</p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-          <input
-            type="text"
-            placeholder="Search name, ID or mobile..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full sm:max-w-xs"
-          />
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
+          
+          {/* Hide Global Filters when in Kanban mode */}
+          {viewMode === 'table' && (
+            <>
+              <input
+                type="text"
+                placeholder="Search name, ID or mobile..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full sm:max-w-xs"
+              />
 
-          <select
-            value={selectedLocation}
-            onChange={(e) => setSelectedLocation(e.target.value)}
-            className="w-full sm:max-w-[130px]"
-          >
-            {LOCATIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-          </select>
+              <select
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
+                className="w-full sm:max-w-[130px]"
+              >
+                {LOCATIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+              </select>
 
-          <select
-            value={selectedLifeStage}
-            onChange={(e) => setSelectedLifeStage(e.target.value)}
-            className="w-full sm:max-w-[130px]"
-          >
-            <option value="All stages">All Stages</option>
-            <option value="New Enquiry">New Enquiry</option>
-            <option value="Contacted">Contacted</option>
-            <option value="Converted">Converted</option>
-            <option value="Lost">Lost</option>
-          </select>
+              <select
+                value={selectedLifeStage}
+                onChange={(e) => setSelectedLifeStage(e.target.value)}
+                className="w-full sm:max-w-[130px]"
+              >
+                <option value="All stages">All Stages</option>
+                <option value="New Enquiry">New Enquiry</option>
+                <option value="Contacted">Contacted</option>
+                <option value="Converted">Converted</option>
+                <option value="Lost">Lost</option>
+              </select>
+            </>
+          )}
 
-          <div className="flex gap-2">
+          {/* View Toggle */}
+          <div className="flex bg-neutral-100 p-1 rounded-lg border border-neutral-200 ml-2">
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
+                viewMode === 'kanban' ? 'bg-white shadow-sm text-primary-700' : 'text-neutral-500 hover:text-neutral-800'
+              }`}
+            >
+              Kanban
+            </button>
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-1.5 text-sm font-semibold rounded-md transition-colors ${
+                viewMode === 'table' ? 'bg-white shadow-sm text-primary-700' : 'text-neutral-500 hover:text-neutral-800'
+              }`}
+            >
+              Table
+            </button>
+          </div>
+
+          <div className="flex gap-2 ml-auto md:ml-2">
             <button 
               onClick={handleExportCSV}
               className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1 border border-neutral-200"
@@ -238,9 +368,24 @@ export default function Leads() {
         />
       )}
 
-      <div className="card border-neutral-200">
-        <div className="overflow-x-auto w-full max-w-full">
-          <table className="w-full text-left whitespace-nowrap lg:whitespace-normal min-w-max">
+      {viewingProfile && (
+        <LeadProfileDrawer 
+          lead={viewingProfile}
+          onClose={() => setViewingProfile(null)}
+          onEditLead={(lead) => setEditingLead(lead)}
+        />
+      )}
+
+      {viewMode === 'kanban' ? (
+        <LeadsKanban 
+          leads={filteredLeads} 
+          onDragEnd={handleDragEnd} 
+          onLeadClick={(lead) => setViewingProfile(lead)} 
+        />
+      ) : (
+        <div className="card border-neutral-200">
+          <div className="overflow-x-auto w-full max-w-full">
+            <table className="w-full text-left whitespace-nowrap lg:whitespace-normal min-w-max">
             <thead>
               <tr className="bg-neutral-50 border-b border-neutral-200">
                 <th className="w-16 px-4 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">Action</th>
@@ -260,7 +405,7 @@ export default function Leads() {
                 <tr><td colSpan="10" className="p-8 text-center text-neutral-500 font-medium">Loading leads...</td></tr>
               ) : filteredLeads.length > 0 ? (
                 filteredLeads.map((lead) => (
-                  <tr key={lead.id} className="hover:bg-neutral-50 transition-colors">
+                  <tr key={lead.id} className="hover:bg-neutral-50 transition-colors cursor-pointer" onClick={() => setViewingProfile(lead)}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <button
@@ -295,14 +440,18 @@ export default function Leads() {
                     <td className="px-4 py-3 text-sm font-semibold text-neutral-900 break-words">{`${lead.firstName} ${lead.lastName}`}</td>
                     <td className="px-4 py-3 text-sm text-neutral-600 break-words">{lead.leadCategory}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-1 rounded text-xs font-semibold
-                        ${lead.priority === 'High' ? 'bg-red-100 text-red-700' : ''}
-                        ${lead.priority === 'Urgent' ? 'bg-rose-500 text-white' : ''}
-                        ${lead.priority === 'Low' ? 'bg-green-100 text-neutral-700' : ''}
-                        ${lead.priority === 'Normal' || !['High', 'Urgent', 'Low'].includes(lead.priority) ? 'bg-blue-50 text-blue-700' : ''}
-                      `}>
-                        {lead.priority || 'Normal'}
-                      </span>
+                      {lead.lifeStage !== 'Lost' ? (
+                        <span className={`inline-flex px-2 py-1 rounded text-xs font-semibold
+                          ${lead.priority === 'High' ? 'bg-red-100 text-red-700' : ''}
+                          ${lead.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' : ''}
+                          ${lead.priority === 'Low' ? 'bg-green-100 text-green-700' : ''}
+                          ${!['High', 'Medium', 'Low'].includes(lead.priority) ? 'bg-blue-50 text-blue-700' : ''}
+                        `}>
+                          {lead.priority || 'Low'}
+                        </span>
+                      ) : (
+                        <span className="text-neutral-400 text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-neutral-600">{lead.mobile}</td>
                     <td className="px-4 py-3 text-sm text-neutral-600 break-words">{lead.assignedTo || 'Unassigned'}</td>
@@ -317,6 +466,7 @@ export default function Leads() {
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 }
