@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, secondaryAuth } from '../../services/firebaseConfig';
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, setPersistence, inMemoryPersistence } from 'firebase/auth';
 import { toast } from 'react-toastify';
 
 // UPDATED: Added Appointments to the master navigation list
@@ -56,11 +56,14 @@ const UserManagement = () => {
         });
         toast.success("User profile updated successfully!");
       } else {
+        // Fix: Prevent secondaryAuth from logging out the primary Auth via persistence overwrite
+        await setPersistence(secondaryAuth, inMemoryPersistence);
+        
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email, formData.password);
         const uid = userCredential.user.uid;
 
         await setDoc(doc(db, "users", uid), {
-          uid,
+          uid: uid,
           name: formData.name,
           email: formData.email,
           role: formData.role,
@@ -93,7 +96,7 @@ const UserManagement = () => {
 
   const handleEditClick = (user) => {
     setIsEditing(true);
-    setCurrentUid(user.uid);
+    setCurrentUid(user.id);
     setFormData({
       name: user.name,
       email: user.email,
@@ -135,6 +138,7 @@ const UserManagement = () => {
               <option value="Staff">Staff</option>
               <option value="Doctor">Doctor</option>
               <option value="Receptionist">Receptionist</option>
+              <option value="Admin">Admin</option>
               <option value="Superadmin">Superadmin</option>
             </select>
 
@@ -150,19 +154,25 @@ const UserManagement = () => {
           <div className="bg-neutral-50 p-5 rounded-xl border border-neutral-200">
             <strong className="block text-sm font-semibold text-neutral-700 mb-4">Allowed Navigation Pages:</strong>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {allNavItems.map(item => (
-                <label key={item} className="flex items-center gap-3 cursor-pointer group">
-                  <div className="relative flex items-center">
-                    <input
-                      type="checkbox"
-                      className="w-5 h-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500 cursor-pointer transition-colors"
-                      checked={formData.allowedNav.includes(item)}
-                      onChange={() => handleNavToggle(item)}
-                    />
-                  </div>
-                  <span className="text-sm font-medium text-neutral-700 group-hover:text-neutral-900 transition-colors">{item}</span>
-                </label>
-              ))}
+              {allNavItems.map(item => {
+                // Hide CRM Settings checkbox if role is not Admin or Superadmin
+                const isAdvancedRole = formData.role === 'Admin' || formData.role === 'Superadmin';
+                if (item === 'CRM Settings' && !isAdvancedRole) return null;
+
+                return (
+                  <label key={item} className="flex items-center gap-3 cursor-pointer group">
+                    <div className="relative flex items-center">
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500 cursor-pointer transition-colors"
+                        checked={formData.allowedNav.includes(item)}
+                        onChange={() => handleNavToggle(item)}
+                      />
+                    </div>
+                    <span className="text-sm font-medium text-neutral-700 group-hover:text-neutral-900 transition-colors">{item}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
 

@@ -3,6 +3,9 @@ import { db } from '../../services/firebaseConfig';
 import { collection, onSnapshot, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import AddFollowUp from './AddFollowUp';
 import { toast } from 'react-toastify';
+import Papa from 'papaparse';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const LOCATIONS = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
 
@@ -12,6 +15,7 @@ export default function FollowUps() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingFollowUp, setEditingFollowUp] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState('All location');
+  const [selectedStatus, setSelectedStatus] = useState('All statuses');
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -41,19 +45,79 @@ export default function FollowUps() {
     }
   };
 
+  const handleExportCSV = () => {
+    if (filteredFollowUps.length === 0) {
+      toast.warning("No follow-ups available to export.");
+      return;
+    }
+    const exportData = filteredFollowUps.map(f => ({
+      Title: f.title,
+      LeadName: f.leadName,
+      AssignedTo: f.assignedTo,
+      Category: f.followupCategory,
+      Status: f.status,
+      NextFollowUp: f.nextFollowUpDate,
+      Description: f.description,
+      Location: f.department
+    }));
+    
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `followups_export_${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+  };
+
+  const handleExportPDF = () => {
+    if (filteredFollowUps.length === 0) {
+      toast.warning("No follow-ups available to export.");
+      return;
+    }
+    const doc = new jsPDF('landscape');
+    doc.text("Follow-Ups Report", 14, 15);
+    
+    const tableColumn = ["Title", "Lead Name", "Assigned To", "Category", "Status", "Next Date", "Location"];
+    const tableRows = [];
+
+    filteredFollowUps.forEach(f => {
+      const row = [
+        f.title,
+        f.leadName,
+        f.assignedTo || 'Unassigned',
+        f.followupCategory,
+        f.status,
+        f.nextFollowUpDate,
+        f.department
+      ];
+      tableRows.push(row);
+    });
+
+    doc.autoTable({
+      head: [tableColumn],
+      body: tableRows,
+      startY: 20,
+      styles: { fontSize: 8 }
+    });
+    
+    doc.save(`followups_report_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
   const filteredFollowUps = useMemo(() => {
     return followUps.filter(f => {
       const matchesLocation = selectedLocation === 'All location' ||
         f.department === selectedLocation;
+        
+      const matchesStatus = selectedStatus === 'All statuses' || f.status === selectedStatus;
 
       const matchesSearch =
         f.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         f.leadName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         f.customerLead?.toLowerCase().includes(searchTerm.toLowerCase());
 
-      return matchesLocation && matchesSearch;
+      return matchesLocation && matchesStatus && matchesSearch;
     });
-  }, [followUps, selectedLocation, searchTerm]);
+  }, [followUps, selectedLocation, selectedStatus, searchTerm]);
 
   const stats = useMemo(() => {
     return {
@@ -87,16 +151,43 @@ export default function FollowUps() {
           <select
             value={selectedLocation}
             onChange={(e) => setSelectedLocation(e.target.value)}
-            className="w-full sm:max-w-[180px]"
+            className="w-full sm:max-w-[130px]"
           >
             {LOCATIONS.map(loc => (
               <option key={loc} value={loc}>{loc}</option>
             ))}
           </select>
 
-          <button className="btn-primary whitespace-nowrap" onClick={() => setShowAddForm(true)}>
-            + Add Follow Up
-          </button>
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="w-full sm:max-w-[130px]"
+          >
+            <option value="All statuses">All Statuses</option>
+            <option value="Open">Open</option>
+            <option value="In-Progress">In-Progress</option>
+            <option value="Completed">Completed</option>
+          </select>
+
+          <div className="flex gap-2">
+            <button 
+              onClick={handleExportCSV}
+              className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1 border border-neutral-200"
+              title="Export to CSV"
+            >
+              CSV
+            </button>
+            <button 
+              onClick={handleExportPDF}
+              className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1 border border-neutral-200"
+              title="Export to PDF"
+            >
+              PDF
+            </button>
+            <button className="btn-primary whitespace-nowrap ml-1" onClick={() => setShowAddForm(true)}>
+              + Add Follow Up
+            </button>
+          </div>
         </div>
       </header>
 

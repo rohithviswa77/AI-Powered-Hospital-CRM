@@ -7,6 +7,9 @@ import {
 } from 'firebase/firestore';
 import AddLead from './AddLead';
 import { toast } from 'react-toastify';
+import Papa from 'papaparse';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 
 const LOCATIONS = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
@@ -18,6 +21,7 @@ export default function Leads() {
   const [editingLead, setEditingLead] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('All location');
+  const [selectedLifeStage, setSelectedLifeStage] = useState('All stages');
 
   useEffect(() => {
     const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
@@ -75,16 +79,77 @@ export default function Leads() {
     }
   };
 
+  const handleExportCSV = () => {
+    if (filteredLeads.length === 0) {
+      toast.warning("No leads available to export.");
+      return;
+    }
+    const exportData = filteredLeads.map(lead => ({
+      ID: lead.contactID,
+      Date: lead.createdAt?.toDate().toLocaleDateString() || 'N/A',
+      FirstName: lead.firstName,
+      LastName: lead.lastName,
+      Category: lead.leadCategory,
+      Priority: lead.priority || 'Normal',
+      Mobile: lead.mobile,
+      AssignedTo: lead.assignedTo || 'Unassigned',
+      LifeStage: lead.lifeStage,
+      Location: lead.department
+    }));
+    
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `leads_export_${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+  };
+
+  const handleExportPDF = () => {
+    if (filteredLeads.length === 0) {
+      toast.warning("No leads available to export.");
+      return;
+    }
+    const doc = new jsPDF();
+    doc.text("Leads Report", 14, 15);
+    
+    const tableColumn = ["ID", "Date", "Name", "Category", "Priority", "Mobile", "Stage"];
+    const tableRows = [];
+
+    filteredLeads.forEach(lead => {
+      const leadData = [
+        lead.contactID,
+        lead.createdAt?.toDate().toLocaleDateString() || 'N/A',
+        `${lead.firstName} ${lead.lastName}`,
+        lead.leadCategory,
+        lead.priority || 'Normal',
+        lead.mobile,
+        lead.lifeStage
+      ];
+      tableRows.push(leadData);
+    });
+
+    doc.autoTable({
+      head: [tableColumn],
+      body: tableRows,
+      startY: 20,
+      styles: { fontSize: 8 }
+    });
+    
+    doc.save(`leads_report_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
   const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
       const matchesLocation = selectedLocation === 'All location' || lead.department === selectedLocation;
+      const matchesStage = selectedLifeStage === 'All stages' || lead.lifeStage === selectedLifeStage;
       const fullName = `${lead.firstName} ${lead.lastName}`.toLowerCase();
       const matchesSearch = fullName.includes(searchTerm.toLowerCase()) ||
         lead.contactID?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         lead.mobile?.includes(searchTerm);
-      return matchesLocation && matchesSearch;
+      return matchesLocation && matchesStage && matchesSearch;
     });
-  }, [leads, selectedLocation, searchTerm]);
+  }, [leads, selectedLocation, selectedLifeStage, searchTerm]);
 
   const stats = useMemo(() => {
     return {
@@ -114,12 +179,40 @@ export default function Leads() {
           <select
             value={selectedLocation}
             onChange={(e) => setSelectedLocation(e.target.value)}
-            className="w-full sm:max-w-[180px]"
+            className="w-full sm:max-w-[130px]"
           >
             {LOCATIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
           </select>
 
-          <button className="btn-primary whitespace-nowrap" onClick={() => setShowAddForm(true)}>+ Add Lead</button>
+          <select
+            value={selectedLifeStage}
+            onChange={(e) => setSelectedLifeStage(e.target.value)}
+            className="w-full sm:max-w-[130px]"
+          >
+            <option value="All stages">All Stages</option>
+            <option value="New Enquiry">New Enquiry</option>
+            <option value="Contacted">Contacted</option>
+            <option value="Converted">Converted</option>
+            <option value="Lost">Lost</option>
+          </select>
+
+          <div className="flex gap-2">
+            <button 
+              onClick={handleExportCSV}
+              className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1 border border-neutral-200"
+              title="Export to CSV"
+            >
+              CSV
+            </button>
+            <button 
+              onClick={handleExportPDF}
+              className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1 border border-neutral-200"
+              title="Export to PDF"
+            >
+              PDF
+            </button>
+            <button className="btn-primary whitespace-nowrap ml-1" onClick={() => setShowAddForm(true)}>+ Add Lead</button>
+          </div>
         </div>
       </header>
 

@@ -4,6 +4,9 @@ import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from 'firebase
 import AddPatient from './AddPatient';
 import PatientHistory from './PatientHistory';
 import { toast } from 'react-toastify';
+import Papa from 'papaparse';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
 
 const LOCATIONS = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
 
@@ -13,6 +16,7 @@ const Patients = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingPatient, setEditingPatient] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState('All location');
+  const [selectedGender, setSelectedGender] = useState('All genders');
   const [searchTerm, setSearchTerm] = useState('');
   const [showHistoryFor, setShowHistoryFor] = useState(null);
 
@@ -42,16 +46,75 @@ const Patients = () => {
     }
   };
 
+  const handleExportCSV = () => {
+    if (filteredPatients.length === 0) {
+      toast.warning("No patients available to export.");
+      return;
+    }
+    const exportData = filteredPatients.map(p => ({
+      ID: p.patientID,
+      Name: `${p.firstName} ${p.lastName}`,
+      Gender: p.gender,
+      Age: p.age,
+      Mobile: p.mobile,
+      AssignedDoctor: p.assignedDoctor || 'Unassigned',
+      ChiefComplaint: p.chiefComplaint || '-',
+      Location: p.department
+    }));
+    
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `patients_export_${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+  };
+
+  const handleExportPDF = () => {
+    if (filteredPatients.length === 0) {
+      toast.warning("No patients available to export.");
+      return;
+    }
+    const doc = new jsPDF('landscape');
+    doc.text("Patients Report", 14, 15);
+    
+    const tableColumn = ["ID", "Name", "Gender/Age", "Mobile", "Doctor", "Complaint", "Branch"];
+    const tableRows = [];
+
+    filteredPatients.forEach(p => {
+      const patientData = [
+        p.patientID,
+        `${p.firstName} ${p.lastName}`,
+        `${p.gender}/${p.age}`,
+        p.mobile,
+        p.assignedDoctor || 'Unassigned',
+        p.chiefComplaint || '-',
+        p.department
+      ];
+      tableRows.push(patientData);
+    });
+
+    doc.autoTable({
+      head: [tableColumn],
+      body: tableRows,
+      startY: 20,
+      styles: { fontSize: 8 }
+    });
+    
+    doc.save(`patients_report_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
   const filteredPatients = useMemo(() => {
     return patients.filter(p => {
       const matchesLocation = selectedLocation === 'All location' || p.department === selectedLocation;
+      const matchesGender = selectedGender === 'All genders' || p.gender === selectedGender;
       const fullName = `${p.firstName} ${p.lastName}`.toLowerCase();
       const matchesSearch = fullName.includes(searchTerm.toLowerCase()) ||
         p.patientID?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.mobile?.includes(searchTerm);
-      return matchesLocation && matchesSearch;
+      return matchesLocation && matchesGender && matchesSearch;
     });
-  }, [patients, selectedLocation, searchTerm]);
+  }, [patients, selectedLocation, selectedGender, searchTerm]);
 
   return (
     <div className="animate-fade-in w-full max-w-full overflow-hidden">
@@ -73,14 +136,41 @@ const Patients = () => {
           <select
             value={selectedLocation}
             onChange={(e) => setSelectedLocation(e.target.value)}
-            className="w-full sm:max-w-[180px]"
+            className="w-full sm:max-w-[130px]"
           >
             {LOCATIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
           </select>
 
-          <button onClick={() => setShowAddForm(true)} className="btn-primary whitespace-nowrap">
-            + Register Patient
-          </button>
+          <select
+            value={selectedGender}
+            onChange={(e) => setSelectedGender(e.target.value)}
+            className="w-full sm:max-w-[130px]"
+          >
+            <option value="All genders">All Genders</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+
+          <div className="flex gap-2">
+            <button 
+              onClick={handleExportCSV}
+              className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1 border border-neutral-200"
+              title="Export to CSV"
+            >
+              CSV
+            </button>
+            <button 
+              onClick={handleExportPDF}
+              className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1 border border-neutral-200"
+              title="Export to PDF"
+            >
+              PDF
+            </button>
+            <button onClick={() => setShowAddForm(true)} className="btn-primary whitespace-nowrap ml-1">
+              + Register Patient
+            </button>
+          </div>
         </div>
       </header>
 
