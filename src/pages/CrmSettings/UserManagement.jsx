@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, secondaryAuth } from '../../services/firebaseConfig';
 import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, query, orderBy } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, setPersistence, inMemoryPersistence } from 'firebase/auth';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
 
 // UPDATED: Added Appointments to the master navigation list
@@ -11,6 +12,7 @@ const UserManagement = () => {
   const [users, setUsers] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [currentUid, setCurrentUid] = useState(null);
+  const [deletingUser, setDeletingUser] = useState(null); // { id, name }
 
   const [formData, setFormData] = useState({
     name: '',
@@ -82,15 +84,13 @@ const UserManagement = () => {
     }
   };
 
-  const handleDeleteUser = async (userId, userName) => {
-    const confirmDelete = window.confirm(`Are you sure you want to revoke CRM access for ${userName}?`);
-    if (confirmDelete) {
-      try {
-        await deleteDoc(doc(db, "users", userId));
-        toast.success("User profile deleted successfully.");
-      } catch (error) {
-        toast.error("Error deleting user profile: " + error.message);
-      }
+  const handleDeleteUser = async (userId) => {
+    try {
+      await deleteDoc(doc(db, "users", userId));
+      toast.success("User profile deleted successfully.");
+      setDeletingUser(null);
+    } catch (error) {
+      toast.error("Error deleting user profile: " + error.message);
     }
   };
 
@@ -216,7 +216,7 @@ const UserManagement = () => {
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
                       <button type="button" className="px-3 py-1 bg-primary-50 text-indigo-600 hover:bg-primary-100 rounded text-sm font-medium transition-colors" onClick={() => handleEditClick(user)}>Edit</button>
-                      <button type="button" className="px-3 py-1 bg-primary-50 text-red-600 hover:bg-primary-100 rounded text-sm font-medium transition-colors" onClick={() => handleDeleteUser(user.id, user.name)}>Delete</button>
+                      <button type="button" className="px-3 py-1 bg-primary-50 text-red-600 hover:bg-primary-100 rounded text-sm font-medium transition-colors" onClick={() => setDeletingUser({ id: user.id, name: user.name })}>Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -230,6 +230,14 @@ const UserManagement = () => {
           </table>
         </div>
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={!!deletingUser}
+        title="Revoke CRM Access"
+        message={`Are you sure you want to permanently revoke CRM access for ${deletingUser?.name}? They will no longer be able to log in.`}
+        onConfirm={() => handleDeleteUser(deletingUser.id)}
+        onCancel={() => setDeletingUser(null)}
+      />
     </div>
   );
 };

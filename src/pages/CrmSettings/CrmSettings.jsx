@@ -17,7 +17,7 @@ const CrmSettings = () => {
         <p className="text-sm font-medium text-neutral-500">Manage categories, staff access, and system configurations.</p>
       </header>
 
-      {/* Navigation Buttons for the two main pages */}
+      {/* Navigation Tabs */}
       <div className="flex gap-2 sm:gap-6 border-b border-neutral-200 mb-8 overflow-x-auto">
         <button
           onClick={() => setActiveTab('categories')}
@@ -44,7 +44,8 @@ const CrmSettings = () => {
       </div>
 
       <div className="w-full">
-        {activeTab === 'categories' ? <CategoryManagement /> : (isSuperadmin && <UserManagement />)}
+        {activeTab === 'categories' && <CategoryManagement />}
+        {activeTab === 'users' && isSuperadmin && <UserManagement />}
       </div>
     </div>
   );

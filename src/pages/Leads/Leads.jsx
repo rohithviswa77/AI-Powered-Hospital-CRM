@@ -8,6 +8,7 @@ import {
 import AddLead from './AddLead';
 import LeadsKanban from './LeadsKanban';
 import LeadProfileDrawer from './LeadProfileDrawer';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
@@ -37,6 +38,7 @@ export default function Leads() {
   const [selectedLocation, setSelectedLocation] = useState('All location');
   const [selectedLifeStage, setSelectedLifeStage] = useState('All stages');
   const [viewMode, setViewMode] = useState('kanban'); // 'table' | 'kanban'
+  const [deletingLeadId, setDeletingLeadId] = useState(null);
 
   useEffect(() => {
     const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
@@ -78,6 +80,14 @@ export default function Leads() {
       if (!lead.patientID) {
         await updateDoc(doc(db, "leads", lead.id), { patientID: newPatientID });
       }
+
+      // SYNC: Update all outreach logs to reflecting 'Patient' status
+      const outreachQuery = query(collection(db, "outreachLogs"), where("personId", "==", lead.id));
+      const outreachSnap = await getDocs(outreachQuery);
+      const outreachPromises = outreachSnap.docs.map(logDoc => 
+        updateDoc(logDoc.ref, { personType: 'Patient' })
+      );
+      await Promise.all(outreachPromises);
       
       toast.success(`Successfully converted!`);
     } catch (error) {
@@ -86,13 +96,13 @@ export default function Leads() {
   };
 
   const handleDelete = async (leadId) => {
-    if (window.confirm("Are you sure you want to delete this lead?")) {
-      try {
-        await deleteDoc(doc(db, "leads", leadId));
-        toast.success("Lead record deleted successfully.");
-      } catch (error) {
-        toast.error("Error deleting lead: " + error.message);
-      }
+    try {
+      await deleteDoc(doc(db, "leads", leadId));
+      toast.success("Lead record deleted successfully.");
+      setDeletingLeadId(null);
+      if (viewingProfile?.id === leadId) setViewingProfile(null);
+    } catch (error) {
+      toast.error("Error deleting lead: " + error.message);
     }
   };
 
@@ -129,6 +139,14 @@ export default function Leads() {
           if (!lead.patientID) {
             await updateDoc(doc(db, "leads", lead.id), { patientID: newPatientID });
           }
+
+          // SYNC: Update all outreach logs to reflect 'Patient' status
+          const outreachQuery = query(collection(db, "outreachLogs"), where("personId", "==", lead.id));
+          const outreachSnap = await getDocs(outreachQuery);
+          const outreachPromises = outreachSnap.docs.map(logDoc => 
+            updateDoc(logDoc.ref, { personType: 'Patient' })
+          );
+          await Promise.all(outreachPromises);
           
           toast.success(`Synced to Patients list!`);
         } else if (newStage === 'Lost') {
@@ -373,6 +391,7 @@ export default function Leads() {
           lead={viewingProfile}
           onClose={() => setViewingProfile(null)}
           onEditLead={(lead) => setEditingLead(lead)}
+          onDeleteLead={(lead) => setDeletingLeadId(lead.id)}
         />
       )}
 
@@ -424,7 +443,7 @@ export default function Leads() {
                         </button>
                         <button
                           className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                          onClick={(e) => { e.stopPropagation(); handleDelete(lead.id); }}
+                          onClick={(e) => { e.stopPropagation(); setDeletingLeadId(lead.id); }}
                           title="Delete"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -467,6 +486,13 @@ export default function Leads() {
         </div>
       </div>
       )}
+      <DeleteConfirmationModal 
+        isOpen={!!deletingLeadId}
+        title="Delete Lead Record"
+        message="Are you sure you want to delete this lead? This will remove all their contact history and active enquiries permanently."
+        onConfirm={() => handleDelete(deletingLeadId)}
+        onCancel={() => setDeletingLeadId(null)}
+      />
     </div>
   );
 }

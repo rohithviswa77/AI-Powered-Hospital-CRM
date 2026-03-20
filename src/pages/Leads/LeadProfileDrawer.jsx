@@ -4,7 +4,7 @@ import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestor
 import AddFollowUp from '../FollowUps/AddFollowUp';
 import { toast } from 'react-toastify';
 
-export default function LeadProfileDrawer({ lead, onClose, onEditLead }) {
+export default function LeadProfileDrawer({ lead, onClose, onEditLead, onDeleteLead }) {
   const [timelineEvents, setTimelineEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddFollowUp, setShowAddFollowUp] = useState(false);
@@ -122,26 +122,34 @@ export default function LeadProfileDrawer({ lead, onClose, onEditLead }) {
           </div>
 
           {/* Action Bar */}
-          <div className="p-4 bg-neutral-50 border-b border-neutral-100 flex gap-3 justify-between px-6">
+          <div className="p-4 bg-neutral-50 border-b border-neutral-100 flex gap-2 px-6">
             {onEditLead && (
               <button 
                 onClick={() => {
                   onClose();
                   onEditLead(lead);
                 }}
-                className="flex-[1.5] bg-white border border-neutral-200 hover:border-primary-400 hover:text-primary-700 text-neutral-700 font-semibold py-2 px-4 rounded-lg shadow-sm transition-all text-sm flex justify-center items-center gap-2"
+                className="flex-1 bg-white border border-neutral-200 hover:border-primary-400 hover:text-primary-700 text-neutral-700 font-semibold py-2 px-3 rounded-lg shadow-sm transition-all text-[13px] flex justify-center items-center gap-1.5"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                Edit Details
+                Edit
               </button>
             )}
             
             <button  
               onClick={() => setShowAddFollowUp(true)}
-              className="flex-[1.5] bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 font-semibold py-2 px-4 rounded-lg shadow-sm transition-all text-sm flex justify-center items-center gap-2"
+              className="flex-1 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 font-semibold py-2 px-3 rounded-lg shadow-sm transition-all text-[13px] flex justify-center items-center gap-1.5"
             >
                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-              Log Follow-Up
+              Follow-Up
+            </button>
+
+            <button
+               onClick={() => onDeleteLead(lead)}
+               className="p-2 bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 rounded-lg shadow-sm transition-all flex items-center justify-center group"
+               title="Delete Lead"
+            >
+              <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
             </button>
           </div>
 

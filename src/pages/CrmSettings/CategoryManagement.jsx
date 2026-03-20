@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc, serverTimestamp, query, orderBy } from 'firebase/firestore';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
 
 const CategoryManagement = () => {
   const [categoryTab, setCategoryTab] = useState('sources');
   const [items, setItems] = useState([]);
+  const [deletingItem, setDeletingItem] = useState(null); // { id, name }
 
   // States for adding
   const [newItem, setNewItem] = useState('');
@@ -89,14 +91,13 @@ const CategoryManagement = () => {
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (window.confirm(`Are you sure you want to delete "${name}"?`)) {
-      try {
-        await deleteDoc(doc(db, currentConfig.collection, id));
-        toast.success(`${currentConfig.label.slice(0, -1)} deleted successfully!`);
-      } catch (error) {
-        toast.error("Error deleting category: " + error.message);
-      }
+  const handleDelete = async (id) => {
+    try {
+      await deleteDoc(doc(db, currentConfig.collection, id));
+      toast.success(`${currentConfig.label.slice(0, -1)} deleted successfully!`);
+      setDeletingItem(null);
+    } catch (error) {
+      toast.error("Error deleting category: " + error.message);
     }
   };
 
@@ -231,7 +232,7 @@ const CategoryManagement = () => {
                           setEditLocation(item.location || locations[0]);
                         }} className="px-3 py-1 bg-emerald-50 text-indigo-600 hover:bg-emerald-100 rounded text-sm font-medium transition-colors">Edit</button>
                       )}
-                      <button onClick={() => handleDelete(item.id, item.name)} className="px-3 py-1 bg-emerald-50 text-red-600 hover:bg-emerald-100 rounded text-sm font-medium transition-colors">Delete</button>
+                      <button onClick={() => setDeletingItem({ id: item.id, name: item.name })} className="px-3 py-1 bg-emerald-50 text-red-600 hover:bg-emerald-100 rounded text-sm font-medium transition-colors">Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -245,6 +246,14 @@ const CategoryManagement = () => {
           </table>
         </div>
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={!!deletingItem}
+        title={`Delete ${currentConfig.label.slice(0, -1)}`}
+        message={`Are you sure you want to delete "${deletingItem?.name}"? Any records associated with this ${currentConfig.label.toLowerCase().slice(0, -1)} might be affected.`}
+        onConfirm={() => handleDelete(deletingItem.id)}
+        onCancel={() => setDeletingItem(null)}
+      />
     </div>
   );
 };

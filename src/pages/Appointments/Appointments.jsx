@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, doc, deleteDoc, updateDoc, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import AddAppointment from './AddAppointment';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
@@ -21,6 +22,7 @@ const Appointments = () => {
 
   // Filter States
   const [selectedLocation, setSelectedLocation] = useState('All location');
+  const [deletingAppointmentId, setDeletingAppointmentId] = useState(null);
   const locations = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
 
   useEffect(() => {
@@ -69,13 +71,12 @@ const Appointments = () => {
   const displayedListAppointments = activeTab === 'Upcoming' ? upcomingAppointments : historyAppointments;
 
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this appointment?")) {
-      try {
-        await deleteDoc(doc(db, "appointments", id));
-        toast.success("Appointment deleted successfully.");
-      } catch (error) {
-        toast.error("Error deleting appointment: " + error.message);
-      }
+    try {
+      await deleteDoc(doc(db, "appointments", id));
+      toast.success("Appointment deleted successfully.");
+      setDeletingAppointmentId(null);
+    } catch (error) {
+      toast.error("Error deleting appointment: " + error.message);
     }
   };
 
@@ -285,7 +286,7 @@ const Appointments = () => {
                         </button>
                         <button
                           className="p-1 text-red-600 bg-red-50 hover:bg-red-100 rounded transition-colors"
-                          onClick={(e) => { e.stopPropagation(); handleDelete(app.id); }}
+                          onClick={(e) => { e.stopPropagation(); setDeletingAppointmentId(app.id); }}
                           title="Delete"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -334,6 +335,14 @@ const Appointments = () => {
           </div>
         )}
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={!!deletingAppointmentId}
+        title="Delete Appointment"
+        message="Are you sure you want to cancel and delete this appointment? This action is permanent and will notify the practitioners schedule."
+        onConfirm={() => handleDelete(deletingAppointmentId)}
+        onCancel={() => setDeletingAppointmentId(null)}
+      />
     </div>
   );
 };

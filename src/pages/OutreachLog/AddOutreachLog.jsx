@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../services/firebaseConfig';
-import { collection, addDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { toast } from "react-toastify";
 
 // ✅ Backend API functions
 import { transcribeAudio, startRecording } from './outreach_model/voiceToText';
 import { summarizeText } from './outreach_model/summarization';
 
-const AddOutreachLog = ({ onClose }) => {
+const AddOutreachLog = ({ onClose, editData = null }) => {
   const [people, setPeople] = useState([]);
   const [staff, setStaff] = useState([]);
 
@@ -19,29 +19,39 @@ const AddOutreachLog = ({ onClose }) => {
   const recorderRef = useRef(null);
 
   const [formData, setFormData] = useState({
-    personId: '',
-    personName: '',
-    outcome: 'Interested',
-    rawNotes: '',
-    aiSummary: '',
-    staffName: '',
-    department: ''
+    personId: editData?.personId || '',
+    personName: editData?.personName || '',
+    outcome: editData?.outcome || 'Interested',
+    rawNotes: editData?.rawNotes || '',
+    aiSummary: editData?.aiSummary || '',
+    staffName: editData?.staffName || '',
+    department: editData?.department || '',
+    personType: editData?.personType || ''
   });
 
   useEffect(() => {
+    let leads = [];
+    let patients = [];
+
     const unsubLeads = onSnapshot(collection(db, "leads"), (snap) => {
-      const leads = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'Lead' }));
-      const unsubPatients = onSnapshot(collection(db, "patients"), (pSnap) => {
-        const patients = pSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'Patient' }));
-        setPeople([...leads, ...patients]);
-      });
+      leads = snap.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'Lead' }));
+      setPeople([...leads, ...patients]);
+    });
+
+    const unsubPatients = onSnapshot(collection(db, "patients"), (pSnap) => {
+      patients = pSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'Patient' }));
+      setPeople([...leads, ...patients]);
     });
 
     const unsubStaff = onSnapshot(collection(db, "staffMembers"), (snap) => {
       setStaff(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
-    return () => { unsubLeads(); unsubStaff(); };
+    return () => { 
+      unsubLeads(); 
+      unsubPatients();
+      unsubStaff(); 
+    };
   }, []);
 
   // ==========================================
@@ -146,14 +156,39 @@ const AddOutreachLog = ({ onClose }) => {
   // ==========================================
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.personId) {
+      toast.error("Please select a Target Patient/Enquiry.");
+      return;
+    }
+    if (!formData.staffName) {
+      toast.error("Please select a Recording Staff member.");
+      return;
+    }
+
     try {
-      await addDoc(collection(db, "outreachLogs"), {
-        ...formData,
-        createdAt: serverTimestamp()
-      });
-      toast.success("Saved successfully!");
+      const dataToSave = {
+        personId: formData.personId,
+        personName: formData.personName,
+        personType: formData.personType || 'Lead',
+        outcome: formData.outcome,
+        rawNotes: formData.rawNotes,
+        aiSummary: formData.aiSummary || '',
+        staffName: formData.staffName,
+        department: formData.department || 'N/A',
+        updatedAt: serverTimestamp(),
+        createdAt: editData ? editData.createdAt : serverTimestamp()
+      };
+
+      if (editData) {
+        await updateDoc(doc(db, "outreachLogs", editData.id), dataToSave);
+        toast.success("Outreach log updated!");
+      } else {
+        await addDoc(collection(db, "outreachLogs"), dataToSave);
+        toast.success("Outreach logged successfully!");
+      }
       onClose();
     } catch (error) {
+      console.error("Save Error:", error);
       toast.error("Save failed: " + error.message);
     }
   };
@@ -161,7 +196,7 @@ const AddOutreachLog = ({ onClose }) => {
   const isProcessing = isTranscribing || isSummarizing;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-neutral-900/60 backdrop-blur-md overflow-y-auto">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-neutral-900/60 backdrop-blur-md overflow-y-auto">
       <div className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl w-full max-w-xl my-4 mx-auto animate-slide-up overflow-hidden border border-white flex flex-col max-h-[90vh]">
 
         {/* Modal Header */}
@@ -176,7 +211,7 @@ const AddOutreachLog = ({ onClose }) => {
         </div>
 
         <div className="overflow-y-auto p-6 flex-1 custom-scrollbar">
-          <form id="add-outreach-form" onSubmit={handleSubmit} className="space-y-6">
+          <form id="add-outreach-form" className="space-y-6">
 
             {/* Section: Clinical Identity */}
             <div className="bg-neutral-50/80 p-5 rounded-xl border border-neutral-100 shadow-sm space-y-4">
@@ -186,6 +221,7 @@ const AddOutreachLog = ({ onClose }) => {
                   <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Target Patient/Enquiry *</label>
                   <select
                     className="py-2 text-sm"
+                    value={formData.personId}
                     onChange={(e) => {
                       const p = people.find(item => item.id === e.target.value);
                       if (p) {
@@ -200,7 +236,6 @@ const AddOutreachLog = ({ onClose }) => {
                         setFormData({ ...formData, personId: '', personName: '' });
                       }
                     }}
-                    required
                   >
                     <option value="">Search records...</option>
                     {people.map(p => (
@@ -213,8 +248,8 @@ const AddOutreachLog = ({ onClose }) => {
                   <label className="block text-[10px] font-bold text-primary-600 uppercase tracking-wider mb-1.5">Recording Staff *</label>
                   <select
                     className="py-2 text-sm border-primary-100"
+                    value={formData.staffName}
                     onChange={(e) => setFormData({ ...formData, staffName: e.target.value })}
-                    required
                   >
                     <option value="">Select Staff</option>
                     {staff.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
@@ -328,9 +363,9 @@ const AddOutreachLog = ({ onClose }) => {
             Cancel
           </button>
           <button
-            type="submit"
-            form="add-outreach-form"
+            type="button"
             className="btn-primary !px-8 !py-2 !text-xs"
+            onClick={handleSubmit}
             disabled={isProcessing || !formData.personId}
           >
             {isProcessing ? "Processing..." : "Finalize Interaction"}

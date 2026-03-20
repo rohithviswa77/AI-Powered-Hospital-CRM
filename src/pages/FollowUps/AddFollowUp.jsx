@@ -94,7 +94,7 @@ const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, pr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-900/50 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-neutral-900/50 backdrop-blur-sm overflow-y-auto">
       <div className="bg-surface rounded-2xl shadow-xl w-full max-w-3xl my-8 mx-auto animate-slide-up overflow-hidden border border-neutral-100 flex flex-col max-h-[90vh]">
 
         <div className="px-6 py-4 border-b border-neutral-200 bg-neutral-50 flex justify-between items-center sticky top-0 z-10">

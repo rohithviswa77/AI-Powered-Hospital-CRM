@@ -3,6 +3,7 @@ import { db } from '../../services/firebaseConfig';
 import { collection, onSnapshot, query, orderBy, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import AddFollowUp from './AddFollowUp';
 import LeadProfileDrawer from '../Leads/LeadProfileDrawer';
+import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
 import Papa from 'papaparse';
 import jsPDF from 'jspdf';
@@ -21,6 +22,7 @@ export default function FollowUps() {
   
   const [viewingProfile, setViewingProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
+  const [deletingFollowUpId, setDeletingFollowUpId] = useState(null);
 
   useEffect(() => {
     const q = query(collection(db, "followups"), orderBy("createdAt", "desc"));
@@ -39,13 +41,12 @@ export default function FollowUps() {
   }, []);
 
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this follow-up?")) {
-      try {
-        await deleteDoc(doc(db, "followups", id));
-        toast.success("Follow-up deleted successfully.");
-      } catch (error) {
-        toast.error("Error deleting follow-up: " + error.message);
-      }
+    try {
+      await deleteDoc(doc(db, "followups", id));
+      toast.success("Follow-up deleted successfully.");
+      setDeletingFollowUpId(null);
+    } catch (error) {
+      toast.error("Error deleting follow-up: " + error.message);
     }
   };
 
@@ -310,7 +311,7 @@ export default function FollowUps() {
                         </button>
                         <button
                           className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                          onClick={(e) => { e.stopPropagation(); handleDelete(f.id); }}
+                          onClick={(e) => { e.stopPropagation(); setDeletingFollowUpId(f.id); }}
                           title="Delete Task"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -357,6 +358,14 @@ export default function FollowUps() {
           </table>
         </div>
       </div>
+
+      <DeleteConfirmationModal
+        isOpen={!!deletingFollowUpId}
+        title="Delete Follow-up Task"
+        message="Are you sure you want to permanently delete this task? This will remove all associated logs and history for this lead interaction."
+        onConfirm={() => handleDelete(deletingFollowUpId)}
+        onCancel={() => setDeletingFollowUpId(null)}
+      />
     </div>
   );
 }
