@@ -3,6 +3,7 @@ import { db } from '../../services/firebaseConfig';
 import { collection, onSnapshot, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import AddOutreachLog from './AddOutreachLog';
 import AddFollowUp from '../FollowUps/AddFollowUp';
+import AddAppointment from '../Appointments/AddAppointment';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
 
@@ -14,8 +15,8 @@ export default function OutreachLog() {
   const [deletingLogId, setDeletingLogId] = useState(null);
   const [editingLog, setEditingLog] = useState(null);
   const [schedulingFollowUp, setSchedulingFollowUp] = useState(null); // { personId, name, location }
+  const [bookingAppointment, setBookingAppointment] = useState(null); // { personId, name, location, notes }
   
-  // New States for Separation and Grouping
   const [activeTab, setActiveTab] = useState('Leads'); // 'Leads' | 'Patients'
   const [viewingPersonLogs, setViewingPersonLogs] = useState(null); // { personId, name, logs: [] }
 
@@ -24,7 +25,6 @@ export default function OutreachLog() {
   const locations = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
 
   useEffect(() => {
-    // 📊 Fetch patient IDs to dynamically categorize outreach logs
     const unsubPatients = onSnapshot(collection(db, "patients"), (snapshot) => {
       setPatientIds(new Set(snapshot.docs.map(doc => doc.id)));
     });
@@ -48,27 +48,19 @@ export default function OutreachLog() {
       await deleteDoc(doc(db, "outreachLogs", id));
       toast.success("Log deleted successfully.");
       setDeletingLogId(null);
-      
-      // Update the local viewing logs if open
       if (viewingPersonLogs) {
         const updatedLogs = viewingPersonLogs.logs.filter(l => l.id !== id);
-        if (updatedLogs.length === 0) {
-          setViewingPersonLogs(null);
-        } else {
-          setViewingPersonLogs({ ...viewingPersonLogs, logs: updatedLogs });
-        }
+        if (updatedLogs.length === 0) setViewingPersonLogs(null);
+        else setViewingPersonLogs({ ...viewingPersonLogs, logs: updatedLogs });
       }
     } catch (error) {
       toast.error("Delete failed: " + error.message);
     }
   };
 
-  // --- Grouping Logic ---
   const groupedData = useMemo(() => {
     const filtered = logs.filter(log => {
-      // DYNAMIC Detection: Overwrite personType if personId is now in patients collection
       const type = patientIds.has(log.personId) ? 'Patient' : (log.personType || 'Lead');
-      
       const matchesTab = type === (activeTab === 'Leads' ? 'Lead' : 'Patient');
       const matchesLocation = selectedLocation === 'All location' || log.department === selectedLocation;
       const matchesSearch = (log.personName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -95,7 +87,7 @@ export default function OutreachLog() {
       const dateB = b.lastInteraction?.toDate ? b.lastInteraction.toDate() : new Date(0);
       return dateB - dateA;
     });
-  }, [logs, activeTab, selectedLocation, searchTerm]);
+  }, [logs, activeTab, selectedLocation, searchTerm, patientIds]);
 
   const stats = useMemo(() => {
     const tabLogs = logs.filter(l => (l.personType || 'Lead') === (activeTab === 'Leads' ? 'Lead' : 'Patient'));
@@ -169,6 +161,18 @@ export default function OutreachLog() {
           prefilledLeadId={schedulingFollowUp.personId}
           prefilledLeadName={schedulingFollowUp.name}
           prefilledDepartment={schedulingFollowUp.location}
+        />
+      )}
+
+      {bookingAppointment && (
+        <AddAppointment
+          onClose={() => setBookingAppointment(null)}
+          appointmentData={{
+            patientId: bookingAppointment.personId,
+            patientName: bookingAppointment.name,
+            doctorName: bookingAppointment.location,
+            notes: `Auto-generated from Outreach: ${bookingAppointment.notes}`
+          }}
         />
       )}
 
@@ -264,31 +268,43 @@ export default function OutreachLog() {
                           {log.outcome}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <button 
+                          onClick={() => setBookingAppointment({ 
+                            personId: viewingPersonLogs.personId, 
+                            name: viewingPersonLogs.name,
+                            location: log.department,
+                            notes: log.aiSummary
+                          })}
+                          className="p-2 text-neutral-300 hover:text-secondary-600 hover:bg-secondary-50 rounded-lg transition-all border border-transparent hover:border-secondary-100"
+                          title="Book Clinical Appointment"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        </button>
                         <button 
                           onClick={() => setSchedulingFollowUp({ 
                             personId: viewingPersonLogs.personId, 
                             name: viewingPersonLogs.name,
                             location: log.department 
                           })}
-                          className="p-2 text-neutral-300 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100"
+                          className="p-2 text-neutral-300 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all border border-transparent hover:border-emerald-100"
                           title="Schedule Follow-up"
                         >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg>
                         </button>
                         <button 
                           onClick={() => setEditingLog(log)}
-                          className="p-2 text-neutral-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-transparent hover:border-primary-100"
+                          className="p-2 text-neutral-300 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-all border border-transparent hover:border-primary-100"
                           title="Edit log"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                         </button>
                         <button 
                           onClick={() => setDeletingLogId(log.id)}
-                          className="p-2 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                          className="p-2 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
                           title="Delete specific log"
                         >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
                       </div>
                     </div>
@@ -349,7 +365,7 @@ function StatsCard({ title, value, type }) {
 
   return (
     <div className={`card p-5 border-l-4 bg-gradient-to-r ${getColors()} hover:shadow-md transition-shadow`}>
-      <h3 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2">{title}</h3>
+      <h3 className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 uppercase">{title}</h3>
       <p className="text-3xl font-black text-neutral-900 tracking-tighter">{value}</p>
     </div>
   );
