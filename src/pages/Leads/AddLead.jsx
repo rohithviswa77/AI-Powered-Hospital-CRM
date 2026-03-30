@@ -18,7 +18,7 @@ const AddLead = ({ onClose, leadData }) => {
     mobile: '',
     email: '',
     leadCategory: '',
-    priority: 'Medium',
+    priority: 'Normal',
     source: '',
     lifeStage: '',
     department: '',
@@ -230,7 +230,7 @@ const AddLead = ({ onClose, leadData }) => {
                     <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">Priority</label>
                     <select name="priority" onChange={handleChange} value={formData.priority}>
                       <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
+                      <option value="Normal">Normal</option>
                       <option value="High">High</option>
                     </select>
                   </div>

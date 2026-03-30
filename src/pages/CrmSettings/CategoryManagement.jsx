@@ -28,7 +28,7 @@ const CategoryManagement = () => {
     sources: { collection: 'sources', label: 'Lead Sources', placeholder: 'e.g. Facebook', hasDesc: false, hasLocation: false },
     leadCategories: { collection: 'leadCategories', label: 'Lead Categories', placeholder: 'e.g. DIABETES', hasDesc: false, hasLocation: false },
     followUpCategories: { collection: 'followUpCategories', label: 'Follow-up Types', placeholder: 'e.g. Call', hasDesc: false, hasLocation: false },
-    staffMembers: { collection: 'staffMembers', label: 'Staff / Assignees', placeholder: 'e.g. John Doe', hasDesc: true, descPlaceholder: 'Role (e.g. Receptionist)', hasLocation: true },
+    staffMembers: { collection: 'staffMembers', label: 'Lead-staff / Assignees', placeholder: 'e.g. John Doe', hasDesc: true, descPlaceholder: 'Role (e.g. Receptionist)', hasLocation: true },
     // UPDATED: Now Doctors will show the Location selection dropdown
     doctors: { collection: 'doctors', label: 'Doctors', placeholder: 'e.g. Dr. Ramesh', hasDesc: true, descPlaceholder: 'Specialty (e.g. Neurologist)', hasLocation: true }
   };

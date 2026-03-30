@@ -11,8 +11,9 @@ import LeadProfileDrawer from './LeadProfileDrawer';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
 import Papa from 'papaparse';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useAuth } from '../../context/AuthContext';
 
 const TAMIL_MALAYALAM_NAMES = [
   { f: 'Murugan', l: 'Pillai' }, { f: 'Karthik', l: 'Raj' }, { f: 'Anand', l: 'Nair' },
@@ -39,6 +40,7 @@ export default function Leads() {
   const [selectedLifeStage, setSelectedLifeStage] = useState('All stages');
   const [viewMode, setViewMode] = useState('kanban'); // 'table' | 'kanban'
   const [deletingLeadId, setDeletingLeadId] = useState(null);
+  const { userProfile } = useAuth();
 
   useEffect(() => {
     const q = query(collection(db, "leads"), orderBy("createdAt", "desc"));
@@ -108,6 +110,7 @@ export default function Leads() {
 
   const handleDragEnd = async (result) => {
     if (!result.destination) return;
+    if (userProfile?.role === 'Manager') return; // Strict View-Only for Manager
     const { source, destination, draggableId } = result;
 
     if (source.droppableId !== destination.droppableId) {
@@ -251,7 +254,7 @@ export default function Leads() {
       tableRows.push(leadData);
     });
 
-    doc.autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 20,
@@ -263,6 +266,11 @@ export default function Leads() {
 
   const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
+      // Role-Based Access Control
+      if (userProfile && ['Lead-staff', 'Staff', 'Doctor'].includes(userProfile.role)) {
+        if (lead.assignedTo !== userProfile.name) return false;
+      }
+
       const matchesLocation = selectedLocation === 'All location' || lead.department === selectedLocation;
       const matchesStage = selectedLifeStage === 'All stages' || lead.lifeStage === selectedLifeStage;
       const fullName = `${lead.firstName} ${lead.lastName}`.toLowerCase();
@@ -271,7 +279,7 @@ export default function Leads() {
         lead.mobile?.includes(searchTerm);
       return matchesLocation && matchesStage && matchesSearch;
     });
-  }, [leads, selectedLocation, selectedLifeStage, searchTerm]);
+  }, [leads, selectedLocation, selectedLifeStage, searchTerm, userProfile]);
 
   const stats = useMemo(() => {
     return {
@@ -359,7 +367,9 @@ export default function Leads() {
             >
               PDF
             </button>
-            <button className="btn-primary whitespace-nowrap ml-1" onClick={() => setShowAddForm(true)}>+ Add Lead</button>
+            {userProfile?.role !== 'Lead-staff' && userProfile?.role !== 'Manager' && (
+              <button className="btn-primary whitespace-nowrap ml-1" onClick={() => setShowAddForm(true)}>+ Add Lead</button>
+            )}
           </div>
         </div>
       </header>
@@ -400,6 +410,7 @@ export default function Leads() {
           leads={filteredLeads} 
           onDragEnd={handleDragEnd} 
           onLeadClick={(lead) => setViewingProfile(lead)} 
+          isDragDisabled={userProfile?.role === 'Manager'}
         />
       ) : (
         <div className="card border-neutral-200">
@@ -427,27 +438,33 @@ export default function Leads() {
                   <tr key={lead.id} className="hover:bg-neutral-50 transition-colors cursor-pointer" onClick={() => setViewingProfile(lead)}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <button
-                          className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
-                          onClick={(e) => { e.stopPropagation(); setEditingLead(lead); }}
-                          title="Edit Lead"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                        </button>
-                        <button
-                          className="p-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-md transition-colors"
-                          onClick={(e) => { e.stopPropagation(); handleConvertToPatient(lead); }}
-                          title="Move to Patients"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                        </button>
-                        <button
-                          className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                          onClick={(e) => { e.stopPropagation(); setDeletingLeadId(lead.id); }}
-                          title="Delete"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                        </button>
+                        {userProfile?.role !== 'Manager' && (
+                          <button
+                            className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setEditingLead(lead); }}
+                            title="Edit Lead"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                          </button>
+                        )}
+                        {userProfile?.role !== 'Manager' && (
+                          <button
+                            className="p-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-md transition-colors"
+                            onClick={(e) => { e.stopPropagation(); handleConvertToPatient(lead); }}
+                            title="Move to Patients"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                          </button>
+                        )}
+                        {!['Lead-staff', 'Doctor', 'Receptionist', 'Manager'].includes(userProfile?.role) && (
+                          <button
+                            className="p-1.5 text-red-600 bg-red-50 hover:bg-neutral-100 rounded-md transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setDeletingLeadId(lead.id); }}
+                            title="Delete Lead"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-neutral-600">{lead.createdAt?.toDate().toLocaleDateString() || 'N/A'}</td>
@@ -462,9 +479,9 @@ export default function Leads() {
                       {lead.lifeStage !== 'Lost' ? (
                         <span className={`inline-flex px-2 py-1 rounded text-xs font-semibold
                           ${lead.priority === 'High' ? 'bg-red-100 text-red-700' : ''}
-                          ${lead.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' : ''}
+                          ${lead.priority === 'Normal' ? 'bg-yellow-100 text-yellow-700' : ''}
                           ${lead.priority === 'Low' ? 'bg-green-100 text-green-700' : ''}
-                          ${!['High', 'Medium', 'Low'].includes(lead.priority) ? 'bg-blue-50 text-blue-700' : ''}
+                          ${!['High', 'Normal', 'Low'].includes(lead.priority) ? 'bg-blue-50 text-blue-700' : ''}
                         `}>
                           {lead.priority || 'Low'}
                         </span>

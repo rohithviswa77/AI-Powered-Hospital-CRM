@@ -6,8 +6,9 @@ import LeadProfileDrawer from '../Leads/LeadProfileDrawer';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
 import Papa from 'papaparse';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useAuth } from '../../context/AuthContext';
 
 const LOCATIONS = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
 
@@ -23,6 +24,7 @@ export default function FollowUps() {
   const [viewingProfile, setViewingProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [deletingFollowUpId, setDeletingFollowUpId] = useState(null);
+  const { userProfile } = useAuth();
 
   useEffect(() => {
     const q = query(collection(db, "followups"), orderBy("createdAt", "desc"));
@@ -98,7 +100,7 @@ export default function FollowUps() {
       tableRows.push(row);
     });
 
-    doc.autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 20,
@@ -110,6 +112,11 @@ export default function FollowUps() {
 
   const filteredFollowUps = useMemo(() => {
     const filtered = followUps.filter(f => {
+      // Role-Based Access Control
+      if (userProfile && ['Lead-staff', 'Staff', 'Doctor'].includes(userProfile.role)) {
+        if (f.assignedTo !== userProfile.name) return false;
+      }
+
       const matchesLocation = selectedLocation === 'All location' || f.department === selectedLocation;
         
       const matchesTab = viewTab === 'active' 
@@ -124,9 +131,14 @@ export default function FollowUps() {
       return matchesLocation && matchesTab && matchesSearch;
     });
 
-    // Calculate active balance per lead
+    // Calculate active balance per lead, respecting RBAC
     const activeCounts = new Map();
     followUps.forEach(f => {
+      // Apply RBAC check here to prevent overcounting other staff members' tasks
+      if (userProfile && ['Lead-staff', 'Staff', 'Doctor'].includes(userProfile.role)) {
+        if (f.assignedTo !== userProfile.name) return;
+      }
+
       if (f.status !== 'Completed') {
         activeCounts.set(f.customerLead, (activeCounts.get(f.customerLead) || 0) + 1);
       }
@@ -141,7 +153,7 @@ export default function FollowUps() {
     });
 
     return Array.from(map.values());
-  }, [followUps, selectedLocation, viewTab, searchTerm]);
+  }, [followUps, selectedLocation, viewTab, searchTerm, userProfile]);
 
   const handleRowClick = async (leadId) => {
     if (!leadId) return;
@@ -237,9 +249,11 @@ export default function FollowUps() {
             >
               PDF
             </button>
-            <button className="btn-primary whitespace-nowrap ml-1" onClick={() => setShowAddForm(true)}>
-              + Add Follow Up
-            </button>
+            {userProfile?.role !== 'Lead-staff' && (
+              <button className="btn-primary whitespace-nowrap ml-1" onClick={() => setShowAddForm(true)}>
+                + Add Follow Up
+              </button>
+            )}
           </div>
         </div>
       </header>

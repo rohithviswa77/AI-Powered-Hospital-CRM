@@ -8,7 +8,7 @@ const COLUMNS = [
   { id: 'Lost', title: 'Lost', color: 'border-rose-500', bg: 'bg-rose-50/50' }
 ];
 
-export default function LeadsKanban({ leads, onDragEnd, onLeadClick }) {
+export default function LeadsKanban({ leads, onDragEnd, onLeadClick, isDragDisabled = false }) {
   const [colSearch, setColSearch] = useState({});
 
   // Organize leads by their life stage and apply column-specific search
@@ -69,7 +69,7 @@ export default function LeadsKanban({ leads, onDragEnd, onLeadClick }) {
                     `}
                   >
                     {columnLeads.map((lead, index) => (
-                      <Draggable key={lead.id} draggableId={lead.id} index={index}>
+                      <Draggable key={lead.id} draggableId={lead.id} index={index} isDragDisabled={isDragDisabled}>
                         {(provided, snapshot) => (
                           <div
                             ref={provided.innerRef}
@@ -87,9 +87,9 @@ export default function LeadsKanban({ leads, onDragEnd, onLeadClick }) {
                               {lead.lifeStage !== 'Lost' && (
                                 <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider
                                   ${lead.priority === 'High' ? 'bg-red-50 text-red-700' : ''}
-                                  ${lead.priority === 'Medium' ? 'bg-yellow-50 text-yellow-700' : ''}
+                                  ${lead.priority === 'Normal' ? 'bg-yellow-50 text-yellow-700' : ''}
                                   ${lead.priority === 'Low' ? 'bg-green-50 text-green-700' : ''}
-                                  ${!['High', 'Medium', 'Low'].includes(lead.priority) ? 'bg-blue-50 text-blue-700' : ''}
+                                  ${!['High', 'Normal', 'Low'].includes(lead.priority) ? 'bg-blue-50 text-blue-700' : ''}
                                 `}>
                                   {lead.priority || 'Low'}
                                 </span>

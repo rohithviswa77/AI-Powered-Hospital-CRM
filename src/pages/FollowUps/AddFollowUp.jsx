@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, addDoc, updateDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../context/AuthContext';
 
 const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, prefilledDepartment }) => {
+  const { userProfile } = useAuth();
   const [staffMembers, setStaffMembers] = useState([]);
   const [leads, setLeads] = useState([]);
   const [followUpCategories, setFollowUpCategories] = useState([]);
@@ -17,6 +19,7 @@ const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, pr
     assignedTo: '',
     followupCategory: '',
     nextFollowUpDate: '',
+    priority: 'Normal',
     description: '',
     additionalInfo: ''
   });
@@ -93,7 +96,12 @@ const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, pr
     }
   };
 
-  return (
+    const isLeadStaff = userProfile?.role === 'Lead-staff';
+    const isManager = userProfile?.role === 'Manager';
+    const isRestrictedEdit = !!editData && isLeadStaff;
+    const isViewOnly = isManager; // Manager is strictly view-only everywhere 
+
+    return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-neutral-900/50 backdrop-blur-sm overflow-y-auto">
       <div className="bg-surface rounded-2xl shadow-xl w-full max-w-3xl my-8 mx-auto animate-slide-up overflow-hidden border border-neutral-100 flex flex-col max-h-[90vh]">
 
@@ -115,6 +123,7 @@ const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, pr
                 value={formData.title}
                 required
                 onChange={handleChange}
+                disabled={isRestrictedEdit || isViewOnly}
               />
             </div>
 
@@ -126,7 +135,7 @@ const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, pr
                   value={formData.customerLead}
                   onChange={handleLeadChange}
                   required
-                  disabled={!!prefilledLeadId} // Lock dropdown if opened from a specific lead drawer
+                  disabled={!!prefilledLeadId || isRestrictedEdit || isViewOnly} // Lock dropdown if opened from a specific lead drawer OR restricted
                 >
                   <option value="" disabled>Select Customer/Lead</option>
                   {leads.map(lead => (
@@ -139,7 +148,7 @@ const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, pr
 
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-1">Assign Task To*</label>
-                <select name="assignedTo" value={formData.assignedTo} onChange={handleChange} required>
+                <select name="assignedTo" value={formData.assignedTo} onChange={handleChange} required disabled={isRestrictedEdit || isViewOnly}>
                   <option value="" disabled>Assign Task To</option>
                   {staffMembers.map(staff => (
                     <option key={staff.id} value={staff.name}>
@@ -153,7 +162,7 @@ const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, pr
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-1">Method*</label>
-                <select name="followupCategory" value={formData.followupCategory} onChange={handleChange} required>
+                <select name="followupCategory" value={formData.followupCategory} onChange={handleChange} required disabled={isRestrictedEdit || isViewOnly}>
                   <option value="" disabled>Select Method</option>
                   {followUpCategories.map(cat => (
                     <option key={cat.id} value={cat.name}>{cat.name}</option>
@@ -163,7 +172,7 @@ const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, pr
 
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-1">Status</label>
-                <select name="status" value={formData.status} onChange={handleChange}>
+                <select name="status" value={formData.status} onChange={handleChange} disabled={isViewOnly}>
                   <option value="Open">Pending</option>
                   <option value="In-Progress">In-Progress</option>
                   <option value="Completed">Completed</option>
@@ -180,35 +189,49 @@ const AddFollowUp = ({ onClose, editData, prefilledLeadId, prefilledLeadName, pr
                   value={formData.nextFollowUpDate}
                   required
                   onChange={handleChange}
+                  disabled={isRestrictedEdit || isViewOnly}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">Priority*</label>
+                <select name="priority" value={formData.priority} onChange={handleChange} required disabled={isRestrictedEdit || isViewOnly}>
+                  <option value="Low">Low</option>
+                  <option value="Normal">Normal</option>
+                  <option value="High">High</option>
+                </select>
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">Description</label>
-              <textarea
-                name="description"
-                placeholder="Enter conversation notes here..."
-                value={formData.description}
-                onChange={handleChange}
-                rows="3"
-              ></textarea>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">Description</label>
+                <textarea
+                  name="description"
+                  placeholder="Enter conversation notes here..."
+                  value={formData.description}
+                  onChange={handleChange}
+                  rows="3"
+                  disabled={isRestrictedEdit || isViewOnly}
+                ></textarea>
+              </div>
+            </form>
+          </div>
+
+          {!isViewOnly && (
+            <div className="px-6 py-4 border-t border-neutral-200 bg-neutral-50 flex justify-end sticky bottom-0 z-10">
+              <button
+                type="submit"
+                form="add-followup-form"
+                disabled={loading}
+                className="px-6 py-2 bg-primary-600 text-white rounded-xl font-bold shadow-lg shadow-primary-200 hover:bg-primary-700 transition-all disabled:opacity-50"
+              >
+                {loading ? 'Saving...' : editData ? 'Update Task' : 'Add Task'}
+              </button>
             </div>
-          </form>
+          )}
         </div>
-
-        <div className="px-6 py-4 border-t border-neutral-200 bg-neutral-50 flex justify-end gap-3 sticky bottom-0 z-10">
-          <button type="button" onClick={onClose} disabled={loading} className="btn-outline">
-            Cancel
-          </button>
-          <button type="submit" form="add-followup-form" disabled={loading} className="btn-success">
-            {loading ? 'Processing...' : editData ? 'Update Task' : 'Schedule Follow Up'}
-          </button>
-        </div>
-
       </div>
-    </div>
-  );
+    );
 };
 
 export default AddFollowUp;

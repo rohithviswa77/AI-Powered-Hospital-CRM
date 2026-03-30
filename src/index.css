@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
+/* Scoped Premium Font (Dashboard Only) */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+
 @layer base {
   body {
     @apply bg-neutral-50 text-neutral-800 antialiased font-sans selection:bg-primary-200 selection:text-primary-900;
@@ -29,6 +32,61 @@
 }
 
 @layer components {
+
+  /* --- Premium Dashboard Scoped Styles --- */
+  .premium-dashboard {
+    font-family: 'Outfit', sans-serif !important;
+  }
+
+  /* Tabular Numerics for Data Scaling */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .label-caps {
+    @apply text-[10px] font-black uppercase tracking-[0.25em] text-neutral-400 leading-none;
+  }
+
+  /* Dashboard Container Shadow */
+  .premium-dashboard .card {
+    @apply bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/60 shadow-xl shadow-neutral-900/5 overflow-hidden transition-all duration-500 hover:shadow-2xl hover:bg-white;
+  }
+
+  /* Custom Scrollbar - Scoped to Dashboard */
+  .premium-dashboard .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .premium-dashboard .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-neutral-200/50 rounded-full hover:bg-neutral-300 transition-colors;
+  }
+
+  /* Holographic Visuals */
+  .glass-gloss {
+    @apply relative overflow-hidden;
+  }
+  .glass-gloss::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none opacity-50 z-[1];
+  }
+
+  /* Live Monitoring Animation - Clinical Focus */
+  @keyframes scanning {
+    0% { transform: translateY(-100%); opacity: 0; }
+    50% { opacity: 0.3; }
+    100% { transform: translateY(100%); opacity: 0; }
+  }
+  .animate-scanning {
+    position: relative;
+    overflow: hidden;
+  }
+  .animate-scanning::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 50%;
+    background: linear-gradient(180deg, transparent, rgba(16, 185, 129, 0.08), transparent);
+    animation: scanning 5s linear infinite;
+    pointer-events: none;
+  }
 
   /* Modern Premium Buttons */
   .btn-primary {
@@ -88,7 +146,7 @@
   .Toastify__toast-body {
     @apply font-medium tracking-tight text-sm text-neutral-800;
   }
-  
+
   .Toastify__progress-bar {
     height: 4px !important;
   }
@@ -96,17 +154,45 @@
   .Toastify__progress-bar--success {
     @apply !bg-gradient-to-r !from-primary-400 !to-primary-600;
   }
+
   .Toastify__progress-bar--error {
     @apply !bg-gradient-to-r !from-red-400 !to-red-600;
   }
+
   .Toastify__progress-bar--info {
     @apply !bg-gradient-to-r !from-secondary-400 !to-secondary-600;
   }
+
   .Toastify__progress-bar--warning {
     @apply !bg-gradient-to-r !from-amber-400 !to-amber-600;
   }
-  
+
   .Toastify__close-button {
     @apply text-neutral-400 hover:text-neutral-700 transition-colors mt-1;
+  }
+
+  /* --- Premium Mesh & Glow Utilities --- */
+  .mesh-primary {
+    background-image: radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.1) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(20, 184, 166, 0.1) 0px, transparent 50%);
+  }
+
+  .mesh-secondary {
+    background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.1) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%);
+  }
+
+  .mesh-rose {
+    background-image: radial-gradient(at 0% 0%, rgba(244, 63, 94, 0.1) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(251, 113, 133, 0.1) 0px, transparent 50%);
+  }
+
+  .glass-reflection {
+    @apply relative overflow-hidden;
+  }
+
+  .glass-reflection::after {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none;
   }
 }

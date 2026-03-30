@@ -6,10 +6,12 @@ import { toast } from "react-toastify";
 // ✅ Backend API functions
 import { transcribeAudio, startRecording } from './outreach_model/voiceToText';
 import { summarizeText } from './outreach_model/summarization';
+import { useAuth } from '../../context/AuthContext';
 
 const AddOutreachLog = ({ onClose, editData = null }) => {
   const [people, setPeople] = useState([]);
   const [staff, setStaff] = useState([]);
+  const { userProfile } = useAuth();
 
   // --- AI Processing States ---
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -24,7 +26,7 @@ const AddOutreachLog = ({ onClose, editData = null }) => {
     outcome: editData?.outcome || 'Interested',
     rawNotes: editData?.rawNotes || '',
     aiSummary: editData?.aiSummary || '',
-    staffName: editData?.staffName || '',
+    staffName: editData?.staffName || userProfile?.name || '',
     department: editData?.department || '',
     personType: editData?.personType || ''
   });
@@ -247,12 +249,16 @@ const AddOutreachLog = ({ onClose, editData = null }) => {
                 <div>
                   <label className="block text-[10px] font-bold text-primary-600 uppercase tracking-wider mb-1.5">Recording Staff *</label>
                   <select
-                    className="py-2 text-sm border-primary-100"
+                    className="py-2 text-sm border-primary-100 disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-neutral-100"
                     value={formData.staffName}
                     onChange={(e) => setFormData({ ...formData, staffName: e.target.value })}
+                    disabled={userProfile?.role === 'Lead-staff'}
                   >
                     <option value="">Select Staff</option>
                     {staff.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    {userProfile?.name && !staff.find(s => s.name === userProfile.name) && (
+                      <option value={userProfile.name}>{userProfile.name}</option>
+                    )}
                   </select>
                 </div>
               </div>

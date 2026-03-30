@@ -7,8 +7,9 @@ import PatientsKanban from './PatientsKanban';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
 import Papa from 'papaparse';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useAuth } from '../../context/AuthContext';
 
 const LOCATIONS = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
 
@@ -23,6 +24,7 @@ const Patients = () => {
   const [viewingProfile, setViewingProfile] = useState(null);
   const [deletingPatientId, setDeletingPatientId] = useState(null);
   const [viewMode, setViewMode] = useState('board'); // 'list' | 'board'
+  const { userProfile } = useAuth();
 
   useEffect(() => {
     const q = query(collection(db, "patients"), orderBy("createdAt", "desc"));
@@ -52,6 +54,7 @@ const Patients = () => {
   const handleDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
+    if (userProfile?.role === 'Manager') return; // Strict View-Only for Manager
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
     // Optimistic UI update
@@ -116,7 +119,7 @@ const Patients = () => {
       tableRows.push(patientData);
     });
 
-    doc.autoTable({
+    autoTable(doc, {
       head: [tableColumn],
       body: tableRows,
       startY: 20,
@@ -128,6 +131,13 @@ const Patients = () => {
 
   const filteredPatients = useMemo(() => {
     return patients.filter(p => {
+      // Role-Based Access Control
+      if (userProfile && ['Lead-staff', 'Staff'].includes(userProfile.role)) {
+        if (p.assignedTo !== userProfile.name) return false;
+      } else if (userProfile && userProfile.role === 'Doctor') {
+        if (p.assignedDoctor !== userProfile.name) return false;
+      }
+
       const matchesLocation = selectedLocation === 'All location' || p.department === selectedLocation;
       const matchesGender = selectedGender === 'All genders' || p.gender === selectedGender;
       const fullName = `${p.firstName} ${p.lastName}`.toLowerCase();
@@ -136,7 +146,7 @@ const Patients = () => {
         p.mobile?.includes(searchTerm);
       return matchesLocation && matchesGender && matchesSearch;
     });
-  }, [patients, selectedLocation, selectedGender, searchTerm]);
+  }, [patients, selectedLocation, selectedGender, searchTerm, userProfile]);
 
   return (
     <div className="animate-fade-in w-full max-w-full overflow-hidden">
@@ -211,9 +221,11 @@ const Patients = () => {
               PDF
             </button>
 
-            <button onClick={() => setShowAddForm(true)} className="btn-primary whitespace-nowrap ml-1">
-              + Register Patient
-            </button>
+            {userProfile?.role !== 'Lead-staff' && userProfile?.role !== 'Doctor' && userProfile?.role !== 'Manager' && (
+              <button onClick={() => setShowAddForm(true)} className="btn-primary whitespace-nowrap ml-1">
+                + Register Patient
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -242,6 +254,7 @@ const Patients = () => {
           patients={filteredPatients}
           onDragEnd={handleDragEnd}
           onPatientClick={(patient) => setViewingProfile(patient)}
+          isDragDisabled={userProfile?.role === 'Manager'}
         />
       ) : (
         <div className="card border-neutral-200">
@@ -268,13 +281,15 @@ const Patients = () => {
                   <tr key={p.id} className="hover:bg-neutral-50 transition-colors cursor-pointer" onClick={() => setViewingProfile(p)}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <button
-                          className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
-                          onClick={(e) => { e.stopPropagation(); setEditingPatient(p); }}
-                          title="Edit Patient"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                        </button>
+                        {userProfile?.role !== 'Manager' && (
+                          <button
+                            className="p-1.5 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setEditingPatient(p); }}
+                            title="Edit Patient"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                          </button>
+                        )}
                         <button
                           className="p-1.5 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-md transition-colors"
                           onClick={(e) => { e.stopPropagation(); setViewingProfile(p); }}
@@ -282,13 +297,15 @@ const Patients = () => {
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         </button>
-                        <button
-                          className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
-                          onClick={(e) => { e.stopPropagation(); setDeletingPatientId(p.id); }}
-                          title="Delete"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                        </button>
+                        {!['Lead-staff', 'Doctor', 'Receptionist', 'Manager'].includes(userProfile?.role) && (
+                          <button
+                            className="p-1.5 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setDeletingPatientId(p.id); }}
+                            title="Delete"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                          </button>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">

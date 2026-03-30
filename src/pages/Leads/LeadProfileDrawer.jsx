@@ -3,8 +3,10 @@ import { db } from '../../services/firebaseConfig';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import AddFollowUp from '../FollowUps/AddFollowUp';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../context/AuthContext';
 
 export default function LeadProfileDrawer({ lead, onClose, onEditLead, onDeleteLead }) {
+  const { userProfile } = useAuth();
   const [timelineEvents, setTimelineEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddFollowUp, setShowAddFollowUp] = useState(false);
@@ -78,9 +80,9 @@ export default function LeadProfileDrawer({ lead, onClose, onEditLead, onDeleteL
               {lead.lifeStage !== 'Lost' && (
                 <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider
                   ${lead.priority === 'High' ? 'bg-red-100 text-red-700' : ''}
-                  ${lead.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' : ''}
+                  ${lead.priority === 'Normal' ? 'bg-yellow-100 text-yellow-700' : ''}
                   ${lead.priority === 'Low' ? 'bg-green-100 text-green-700' : ''}
-                  ${!['High', 'Medium', 'Low'].includes(lead.priority) ? 'bg-blue-50 text-blue-700' : ''}
+                  ${!['High', 'Normal', 'Low'].includes(lead.priority) ? 'bg-blue-50 text-blue-700' : ''}
                 `}>
                   {lead.priority || 'Low'} priority
                 </span>
@@ -123,7 +125,7 @@ export default function LeadProfileDrawer({ lead, onClose, onEditLead, onDeleteL
 
           {/* Action Bar */}
           <div className="p-4 bg-neutral-50 border-b border-neutral-100 flex gap-2 px-6">
-            {onEditLead && (
+            {onEditLead && userProfile?.role !== 'Manager' && (
               <button 
                 onClick={() => {
                   onClose();
@@ -136,21 +138,25 @@ export default function LeadProfileDrawer({ lead, onClose, onEditLead, onDeleteL
               </button>
             )}
             
-            <button  
-              onClick={() => setShowAddFollowUp(true)}
-              className="flex-1 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 font-semibold py-2 px-3 rounded-lg shadow-sm transition-all text-[13px] flex justify-center items-center gap-1.5"
-            >
-               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-              Follow-Up
-            </button>
+            {userProfile?.role !== 'Lead-staff' && userProfile?.role !== 'Manager' && (
+              <button  
+                onClick={() => setShowAddFollowUp(true)}
+                className="flex-1 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 font-semibold py-2 px-3 rounded-lg shadow-sm transition-all text-[13px] flex justify-center items-center gap-1.5"
+              >
+                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                Follow-Up
+              </button>
+            )}
 
-            <button
-               onClick={() => onDeleteLead(lead)}
-               className="p-2 bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 rounded-lg shadow-sm transition-all flex items-center justify-center group"
-               title="Delete Lead"
-            >
-              <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-            </button>
+            {!['Lead-staff', 'Doctor', 'Receptionist', 'Manager'].includes(userProfile?.role) && (
+              <button
+                 onClick={() => onDeleteLead(lead)}
+                 className="p-2 bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 rounded-lg shadow-sm transition-all flex items-center justify-center group"
+                 title="Delete Lead"
+              >
+                <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
+            )}
           </div>
 
           {/* Timeline */}
@@ -197,13 +203,15 @@ export default function LeadProfileDrawer({ lead, onClose, onEditLead, onDeleteL
                           <>
                             <div className="flex justify-between items-start">
                               <p className="text-sm font-semibold text-neutral-800">{event.followupCategory || 'General Check-in'}</p>
-                              <button 
-                                onClick={() => setEditingFollowUp(event)}
-                                className="p-1 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
-                                title="Edit Follow-up"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-                              </button>
+                              {userProfile?.role !== 'Manager' && (
+                                <button 
+                                  onClick={() => setEditingFollowUp(event)}
+                                  className="p-1 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                                  title="Edit Follow-up"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                </button>
+                              )}
                             </div>
                             {event.notes && <p className="text-sm text-neutral-600 mt-2 bg-neutral-50 p-2 rounded">{event.notes}</p>}
                             <div className="flex items-center gap-2 mt-3 text-xs text-neutral-500 font-medium">

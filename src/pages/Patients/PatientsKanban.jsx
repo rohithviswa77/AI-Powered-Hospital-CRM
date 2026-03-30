@@ -8,7 +8,7 @@ const COLUMNS = [
   { id: 'Discharged', title: 'Discharged', color: 'border-purple-500', bg: 'bg-purple-50/50' }
 ];
 
-export default function PatientsKanban({ patients, onDragEnd, onPatientClick }) {
+export default function PatientsKanban({ patients, onDragEnd, onPatientClick, isDragDisabled = false }) {
   const [colSearch, setColSearch] = useState({});
 
   // Organize patients by their treatment stage and apply column-specific search
@@ -70,7 +70,7 @@ export default function PatientsKanban({ patients, onDragEnd, onPatientClick }) 
                     `}
                   >
                     {columnPatients.map((patient, index) => (
-                      <Draggable key={patient.id} draggableId={patient.id} index={index}>
+                      <Draggable key={patient.id} draggableId={patient.id} index={index} isDragDisabled={isDragDisabled}>
                         {(provided, snapshot) => (
                           <div
                             ref={provided.innerRef}

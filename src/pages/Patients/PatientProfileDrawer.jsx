@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebaseConfig';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../context/AuthContext';
 
 export default function PatientProfileDrawer({ patient, onClose, onEditPatient, onDeletePatient }) {
+  const { userProfile } = useAuth();
   const [timelineEvents, setTimelineEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -155,24 +157,25 @@ export default function PatientProfileDrawer({ patient, onClose, onEditPatient, 
             </div>
           </div>
 
-          {/* Action Bar */}
-          <div className="p-4 bg-neutral-50 border-b border-neutral-100 flex gap-3 px-6">
-            <button 
-              onClick={() => onEditPatient(patient)}
-              className="flex-1 bg-white border border-neutral-200 hover:border-primary-400 hover:text-primary-700 text-neutral-700 font-semibold py-2 px-4 rounded-lg shadow-sm transition-all text-sm flex justify-center items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-              Edit Clinical Details
-            </button>
-            <button 
-              onClick={() => onDeletePatient(patient)}
-              className="bg-red-50 border border-red-100 hover:bg-red-100 hover:border-red-200 text-red-600 font-semibold py-2 px-4 rounded-lg shadow-sm transition-all text-sm flex justify-center items-center gap-2"
-              title="Delete Patient Record"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-              Delete File
-            </button>
-          </div>
+          {userProfile?.role !== 'Manager' && (
+            <div className="p-4 bg-neutral-50 border-b border-neutral-100 flex gap-3 px-6">
+              <button 
+                onClick={() => onEditPatient(patient)}
+                className="flex-1 bg-white border border-neutral-200 hover:border-primary-400 hover:text-primary-700 text-neutral-700 font-semibold py-2 px-4 rounded-lg shadow-sm transition-all text-sm flex justify-center items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                Edit Clinical Details
+              </button>
+              <button 
+                onClick={() => onDeletePatient(patient)}
+                className="bg-red-50 border border-red-100 hover:bg-red-100 hover:border-red-200 text-red-600 font-semibold py-2 px-4 rounded-lg shadow-sm transition-all text-sm flex justify-center items-center gap-2"
+                title="Delete Patient Record"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                Delete File
+              </button>
+            </div>
+          )}
 
           {/* Unified Timeline */}
           <div className="p-6">

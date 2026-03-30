@@ -4,31 +4,41 @@ import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, serverTimest
 import { createUserWithEmailAndPassword, setPersistence, inMemoryPersistence } from 'firebase/auth';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../context/AuthContext';
 
 // UPDATED: Added Appointments to the master navigation list
 const allNavItems = ["Dashboard", "Leads", "Follow ups", "Patients", "Outreach Log", "Appointments", "CRM Settings"];
 
 const UserManagement = () => {
   const [users, setUsers] = useState([]);
+  const [staffMembers, setStaffMembers] = useState([]);
+  const [doctors, setDoctors] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [currentUid, setCurrentUid] = useState(null);
   const [deletingUser, setDeletingUser] = useState(null); // { id, name }
+  const { currentUser } = useAuth();
 
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    role: 'Staff', // Changed default to Staff, but can be anything
+    role: 'Lead-staff',
     location: '',
-    // UPDATED: Default access now includes Outreach Log and Appointments
-    allowedNav: ["Dashboard", "Leads", "Follow ups", "Outreach Log", "Appointments"]
+    // UPDATED: Default access now includes Patients, Outreach Log, and Appointments
+    allowedNav: ["Dashboard", "Leads", "Follow ups", "Patients", "Outreach Log", "Appointments"]
   });
 
   useEffect(() => {
     const unsubUsers = onSnapshot(query(collection(db, "users"), orderBy("createdAt", "desc")), (snapshot) => {
       setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
-    return () => unsubUsers();
+    const unsubStaff = onSnapshot(collection(db, "staffMembers"), (snapshot) => {
+      setStaffMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    const unsubDocs = onSnapshot(collection(db, "doctors"), (snapshot) => {
+      setDoctors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => { unsubUsers(); unsubStaff(); unsubDocs(); };
   }, []);
 
   const handleNavToggle = (item) => {
@@ -50,13 +60,28 @@ const UserManagement = () => {
 
     try {
       if (isEditing) {
+        // 1. Update the 'users' collection (The Auth profile)
         await updateDoc(doc(db, "users", currentUid), {
           name: formData.name,
           role: formData.role,
           location: formData.location,
           allowedNav: formData.allowedNav
         });
-        toast.success("User profile updated successfully!");
+
+        // 2. Automate sync to assignment collections (staffMembers/doctors)
+        const isDoctor = formData.role === 'Doctor';
+        const syncCollection = isDoctor ? 'doctors' : 'staffMembers';
+        const syncRef = doc(db, syncCollection, currentUid);
+        
+        await setDoc(syncRef, {
+          name: formData.name,
+          role: formData.role, // redundant for clarity in assignment dropdowns
+          location: formData.location,
+          description: formData.role, // Used in CategoryManagement.jsx as a label
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        toast.success("User profile & staff assignments updated successfully!");
       } else {
         // Fix: Prevent secondaryAuth from logging out the primary Auth via persistence overwrite
         await setPersistence(secondaryAuth, inMemoryPersistence);
@@ -64,6 +89,7 @@ const UserManagement = () => {
         const userCredential = await createUserWithEmailAndPassword(secondaryAuth, formData.email, formData.password);
         const uid = userCredential.user.uid;
 
+        // 1. Create the 'users' Auth profile
         await setDoc(doc(db, "users", uid), {
           uid: uid,
           name: formData.name,
@@ -72,6 +98,20 @@ const UserManagement = () => {
           location: formData.location,
           allowedNav: formData.allowedNav,
           status: 'Active',
+          createdAt: serverTimestamp()
+        });
+
+        // 2. Automate sync to assignment collections (staffMembers/doctors)
+        const isDoctor = formData.role === 'Doctor';
+        const syncCollection = isDoctor ? 'doctors' : 'staffMembers';
+        const syncRef = doc(db, syncCollection, uid);
+        
+        await setDoc(syncRef, {
+          uid: uid,
+          name: formData.name,
+          role: formData.role,
+          location: formData.location,
+          description: formData.role, // helps identify them in staff dropdowns
           createdAt: serverTimestamp()
         });
 
@@ -114,7 +154,7 @@ const UserManagement = () => {
       name: '',
       email: '',
       password: '',
-      role: 'Staff',
+      role: 'Lead-staff',
       location: '',
       allowedNav: ["Dashboard", "Leads", "Follow ups", "Outreach Log", "Appointments"]
     });
@@ -124,20 +164,55 @@ const UserManagement = () => {
     <div className="w-full">
       <h3 className="text-xl font-bold text-neutral-800 mb-6">{isEditing ? 'Edit Staff Profile & Access' : 'Create New Staff'}</h3>
 
-      <div className="card mb-10">
+      {userProfile?.role !== 'Manager' && (
+        <div className="card mb-10">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <input type="text" placeholder="Name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required className="w-full" />
+            {formData.role === 'Lead-staff' && !isEditing ? (
+              <select required className="w-full" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })}>
+                <option value="" disabled>Select Assigned Staff</option>
+                {staffMembers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+            ) : formData.role === 'Doctor' && !isEditing ? (
+              <select required className="w-full" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })}>
+                <option value="" disabled>Select Assigned Doctor</option>
+                {doctors.map(d => <option key={d.id} value={d.name}>Dr. {d.name}</option>)}
+              </select>
+            ) : (
+              <input type="text" placeholder="Name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required className="w-full" disabled={isEditing} />
+            )}
             <input type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} disabled={isEditing} required className="w-full disabled:opacity-50 disabled:bg-neutral-100" />
 
             {!isEditing && (
               <input type="text" placeholder="Initial Password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} required className="w-full" />
             )}
 
-            <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })} className="w-full">
-              <option value="Staff">Staff</option>
+            <select 
+              value={formData.role} 
+              onChange={(e) => {
+                const newRole = e.target.value;
+                let newNav = [...formData.allowedNav];
+                if (!isEditing) {
+                  if (newRole === 'Doctor') {
+                    newNav = ["Dashboard", "Patients", "Appointments"];
+                  } else if (newRole === 'Lead-staff') {
+                    newNav = ["Dashboard", "Leads", "Follow ups", "Patients", "Outreach Log", "Appointments"];
+                  } else if (newRole === 'Receptionist') {
+                    newNav = ["Dashboard", "Leads", "Patients", "Outreach Log", "Appointments"];
+                  } else if (newRole === 'Manager') {
+                    newNav = ["Dashboard", "Leads", "Follow ups", "Patients", "Outreach Log", "Appointments"];
+                  } else if (newRole === 'Admin' || newRole === 'Superadmin') {
+                    newNav = ["Dashboard", "Leads", "Follow ups", "Patients", "Outreach Log", "Appointments", "CRM Settings"];
+                  }
+                }
+                setFormData(prev => ({ ...prev, role: newRole, name: isEditing ? prev.name : '', allowedNav: newNav }));
+              }} 
+              className="w-full"
+            >
+              <option value="Lead-staff">Lead-staff</option>
               <option value="Doctor">Doctor</option>
               <option value="Receptionist">Receptionist</option>
+              <option value="Manager">Manager</option>
               <option value="Admin">Admin</option>
               <option value="Superadmin">Superadmin</option>
             </select>
@@ -182,8 +257,9 @@ const UserManagement = () => {
             </button>
             {isEditing && <button type="button" className="btn-outline" onClick={resetForm}>Cancel</button>}
           </div>
-        </form>
-      </div>
+          </form>
+        </div>
+      )}
 
       <h3 className="text-xl font-bold text-neutral-800 mb-6">Staff Directory</h3>
       <div className="card border-neutral-200">
@@ -196,11 +272,20 @@ const UserManagement = () => {
                 <th className="px-4 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">Role</th>
                 <th className="px-4 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">Location</th>
                 <th className="px-4 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider">Allowed Menus</th>
-                <th className="px-4 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-right">Actions</th>
+                {userProfile?.role !== 'Manager' && (
+                  <th className="px-4 py-3 text-xs font-semibold text-neutral-500 uppercase tracking-wider text-right">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {users.map(user => (
+              {[...users]
+                .sort((a, b) => {
+                  const roleOrder = { 'Superadmin': 1, 'Admin': 2, 'Doctor': 3, 'Receptionist': 4, 'Lead-staff': 5 };
+                  const roleA = roleOrder[a.role] || 99;
+                  const roleB = roleOrder[b.role] || 99;
+                  return roleA - roleB;
+                })
+                .map(user => (
                 <tr key={user.id} className="hover:bg-neutral-50 transition-colors">
                   <td className="px-4 py-3 font-semibold text-neutral-900">{user.name}</td>
                   <td className="px-4 py-3 text-sm text-neutral-600">{user.email}</td>
@@ -213,12 +298,21 @@ const UserManagement = () => {
                   <td className="px-4 py-3 text-xs text-neutral-500 max-w-[200px] truncate" title={user.allowedNav?.join(", ")}>
                     {user.allowedNav?.join(", ")}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button type="button" className="px-3 py-1 bg-primary-50 text-indigo-600 hover:bg-primary-100 rounded text-sm font-medium transition-colors" onClick={() => handleEditClick(user)}>Edit</button>
-                      <button type="button" className="px-3 py-1 bg-primary-50 text-red-600 hover:bg-primary-100 rounded text-sm font-medium transition-colors" onClick={() => setDeletingUser({ id: user.id, name: user.name })}>Delete</button>
-                    </div>
-                  </td>
+                  {userProfile?.role !== 'Manager' && (
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-2">
+                        {user.id === currentUser?.uid && (
+                          <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-1 rounded border border-primary-100 mr-1">
+                            You
+                          </span>
+                        )}
+                        <button type="button" className="px-3 py-1 bg-primary-50 text-indigo-600 hover:bg-primary-100 rounded text-sm font-medium transition-colors" onClick={() => handleEditClick(user)}>Edit</button>
+                        {user.id !== currentUser?.uid && (
+                          <button type="button" className="px-3 py-1 bg-primary-50 text-red-600 hover:bg-primary-100 rounded text-sm font-medium transition-colors" onClick={() => setDeletingUser({ id: user.id, name: user.name })}>Delete</button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {users.length === 0 && (

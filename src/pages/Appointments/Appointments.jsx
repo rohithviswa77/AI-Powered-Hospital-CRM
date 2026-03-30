@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../services/firebaseConfig';
-import { collection, doc, deleteDoc, updateDoc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, doc, deleteDoc, updateDoc, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import AddAppointment from './AddAppointment';
 import DeleteConfirmationModal from '../../components/DeleteConfirmationModal';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../context/AuthContext';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -11,7 +12,10 @@ import 'react-big-calendar/lib/css/react-big-calendar.css';
 const localizer = momentLocalizer(moment);
 
 const Appointments = () => {
+  const { userProfile } = useAuth();
   const [appointments, setAppointments] = useState([]);
+  const [assignedPats, setAssignedPats] = useState([]);
+  const [assignedLeads, setAssignedLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
@@ -29,13 +33,40 @@ const Appointments = () => {
   const locations = ["All location", "Koyilandy", "Payyannur", "Chengannur"];
 
   useEffect(() => {
+    if (!userProfile) return;
+
+    // 1. Fetch appointments
     const q = query(collection(db, "appointments"), orderBy("appointmentTime", "asc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setAppointments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     });
-    return () => unsubscribe();
-  }, []);
+
+    // 2. If Lead-staff or Staff, fetch assigned patients to filter appointments
+    let unsubPatients = () => {};
+    let unsubLeads = () => {};
+
+    if (['Lead-staff', 'Staff'].includes(userProfile.role)) {
+      const patQuery = query(collection(db, "patients"), where("assignedTo", "==", userProfile.name));
+      const leadQuery = query(collection(db, "leads"), where("assignedTo", "==", userProfile.name));
+      
+      unsubPatients = onSnapshot(patQuery, (snap) => {
+        setAssignedPats(snap.docs.map(d => d.id));
+      });
+      
+      unsubLeads = onSnapshot(leadQuery, (snap) => {
+        setAssignedLeads(snap.docs.map(d => d.id));
+      });
+    }
+
+    return () => {
+      unsubscribe();
+      unsubPatients();
+      unsubLeads();
+    };
+  }, [userProfile]);
+
+  const assignedPatientIds = useMemo(() => new Set([...assignedPats, ...assignedLeads]), [assignedPats, assignedLeads]);
 
   const processedAndFiltered = useMemo(() => {
     const now = new Date();
@@ -44,6 +75,16 @@ const Appointments = () => {
 
     return appointments
       .filter(app => {
+        // RBAC Filtering for Lead-staff
+        if (['Lead-staff', 'Staff'].includes(userProfile?.role)) {
+          if (!assignedPatientIds.has(app.patientId)) return false;
+        }
+
+        // RBAC Filtering for Doctor
+        if (userProfile?.role === 'Doctor') {
+          if (app.doctorName !== userProfile.name) return false;
+        }
+
         if (selectedLocation === 'All location') return true;
         return app.doctorName?.includes(selectedLocation);
       })
@@ -72,7 +113,7 @@ const Appointments = () => {
         if (dateCompare !== 0) return dateCompare;
         return a.appointmentTime.localeCompare(b.appointmentTime);
       });
-  }, [appointments, selectedLocation, searchTerm]);
+  }, [appointments, selectedLocation, searchTerm, userProfile, assignedPatientIds]);
 
   const upcomingAppointments = processedAndFiltered.filter(app => {
     const isCompleted = ['attended', 'missed', 'completed'].includes(app.status?.toLowerCase());
@@ -87,18 +128,17 @@ const Appointments = () => {
   const displayedListAppointments = activeTab === 'Upcoming' ? upcomingAppointments : historyAppointments;
 
   const stats = useMemo(() => {
-    const now = new Date();
     const todayStr = moment().format('YYYY-MM-DD');
-    const todayAppts = appointments.filter(a => a.appointmentDate === todayStr);
+    const todayAppts = processedAndFiltered.filter(a => a.appointmentDate === todayStr);
     const missedAppts = processedAndFiltered.filter(a => a.status?.toLowerCase() === 'missed' || a.autoMissed);
     
     return {
-      total: appointments.length,
+      total: processedAndFiltered.length,
       today: todayAppts.length,
       missed: missedAppts.length,
-      missedPercent: appointments.length > 0 ? Math.round((missedAppts.length / appointments.length) * 100) : 0
+      missedPercent: processedAndFiltered.length > 0 ? Math.round((missedAppts.length / processedAndFiltered.length) * 100) : 0
     };
-  }, [appointments, processedAndFiltered]);
+  }, [processedAndFiltered]);
 
   const calendarEvents = processedAndFiltered.map(app => ({
     id: app.id,
@@ -201,18 +241,20 @@ const Appointments = () => {
               </button>
             ))}
           </div>
-          <div className="relative">
-            <select
-              value={selectedLocation}
-              onChange={(e) => setSelectedLocation(e.target.value)}
-              className="pl-4 pr-10 h-12 min-w-[180px] bg-white border-neutral-200 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-sm appearance-none"
-            >
-              {locations.map(loc => (
-                <option key={loc} value={loc}>{loc === 'All location' ? 'Global' : `Dr. ${loc}`}</option>
-              ))}
-            </select>
-            <svg className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-          </div>
+          {userProfile?.role !== 'Doctor' && (
+            <div className="relative">
+              <select
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
+                className="pl-4 pr-10 h-12 min-w-[180px] bg-white border-neutral-200 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-sm appearance-none"
+              >
+                {locations.map(loc => (
+                  <option key={loc} value={loc}>{loc === 'All location' ? 'Global' : `Dr. ${loc}`}</option>
+                ))}
+              </select>
+              <svg className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </div>
+          )}
           <div className="relative group">
             <input
               type="text"
@@ -224,9 +266,11 @@ const Appointments = () => {
             <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </div>
 
-          <button className="btn-primary h-12 px-8 rounded-2xl shadow-xl shadow-primary-500/10 active:scale-95 transition-all text-[10px] font-black uppercase tracking-widest" onClick={() => setShowAddForm(true)}>
-            + Book Slot
-          </button>
+          {userProfile?.role !== 'Lead-staff' && userProfile?.role !== 'Doctor' && userProfile?.role !== 'Manager' && (
+            <button className="btn-primary h-12 px-8 rounded-2xl shadow-xl shadow-primary-500/10 active:scale-95 transition-all text-[10px] font-black uppercase tracking-widest" onClick={() => setShowAddForm(true)}>
+              + Book Slot
+            </button>
+          )}
         </div>
       </header>
 
@@ -296,10 +340,16 @@ const Appointments = () => {
                     <tr key={app.id} className="bg-white/80 hover:bg-white shadow-sm rounded-2xl transition-all group border border-neutral-100">
                         <td className="px-6 py-4 rounded-l-2xl">
                         <div className="flex items-center gap-2">
-                            <button onClick={() => handleUpdateStatus(app.id, 'Attended')} className="p-2 text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white rounded-xl transition-all" title="Mark Attended"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
-                            <button onClick={() => handleUpdateStatus(app.id, 'Missed')} className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-500 hover:text-white rounded-xl transition-all" title="Mark Missed"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
-                            <button onClick={() => setEditingAppointment(app)} className="p-2 text-primary-600 bg-primary-50 hover:bg-primary-500 hover:text-white rounded-xl transition-all" title="Edit"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
-                            <button onClick={() => setDeletingAppointmentId(app.id)} className="p-2 text-neutral-400 hover:text-rose-600 rounded-xl transition-all opacity-0 group-hover:opacity-100" title="Cancel/Delete"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                            {['Superadmin', 'Admin', 'Receptionist'].includes(userProfile?.role) && (
+                              <>
+                                <button onClick={() => handleUpdateStatus(app.id, 'Attended')} className="p-2 text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white rounded-xl transition-all" title="Mark Attended"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
+                                <button onClick={() => handleUpdateStatus(app.id, 'Missed')} className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-500 hover:text-white rounded-xl transition-all" title="Mark Missed"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                                <button onClick={() => setEditingAppointment(app)} className="p-2 text-primary-600 bg-primary-50 hover:bg-primary-500 hover:text-white rounded-xl transition-all" title="Edit"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
+                              </>
+                            )}
+                            {!['Lead-staff', 'Doctor', 'Receptionist', 'Manager'].includes(userProfile?.role) && (
+                                <button onClick={() => setDeletingAppointmentId(app.id)} className="p-2 text-neutral-400 hover:text-rose-600 rounded-xl transition-all opacity-0 group-hover:opacity-100" title="Cancel/Delete"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                            )}
                         </div>
                         </td>
                         <td className="px-6 py-4">
@@ -346,7 +396,9 @@ const Appointments = () => {
              <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4">
                 <div className="flex justify-between items-center mb-4">
                     <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{selectedDayInfo.appointments.length} Records</span>
-                    <button onClick={() => { setEditingAppointment({ appointmentDate: selectedDayInfo.date }); }} className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:underline">+ Quick Book</button>
+                    {userProfile?.role !== 'Lead-staff' && userProfile?.role !== 'Doctor' && (
+                      <button onClick={() => { setEditingAppointment({ appointmentDate: selectedDayInfo.date }); }} className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:underline">+ Quick Book</button>
+                    )}
                 </div>
                 
                 {selectedDayInfo.appointments.length > 0 ? (
@@ -371,10 +423,16 @@ const Appointments = () => {
                             `}>{app.displayStatus}</span>
                            
                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                               <button onClick={() => handleUpdateStatus(app.id, 'Attended')} className="p-2 text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white rounded-xl transition-all" title="Mark Attended"><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
-                               <button onClick={() => handleUpdateStatus(app.id, 'Missed')} className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-500 hover:text-white rounded-xl transition-all" title="Mark Missed"><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
-                               <button onClick={() => setEditingAppointment(app)} className="p-2 text-primary-600 bg-primary-50 hover:bg-primary-500 hover:text-white rounded-xl transition-all" title="Edit"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
-                               <button onClick={() => handleDelete(app.id)} className="p-2 text-neutral-400 hover:text-rose-600" title="Cancel/Delete"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                               {['Superadmin', 'Admin', 'Receptionist'].includes(userProfile?.role) && (
+                                  <>
+                                    <button onClick={() => handleUpdateStatus(app.id, 'Attended')} className="p-2 text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white rounded-xl transition-all" title="Mark Attended"><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></button>
+                                    <button onClick={() => handleUpdateStatus(app.id, 'Missed')} className="p-2 text-rose-600 bg-rose-50 hover:bg-rose-500 hover:text-white rounded-xl transition-all" title="Mark Missed"><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                                    <button onClick={() => setEditingAppointment(app)} className="p-2 text-primary-600 bg-primary-50 hover:bg-primary-500 hover:text-white rounded-xl transition-all" title="Edit"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
+                                  </>
+                               )}
+                               {!['Lead-staff', 'Doctor', 'Receptionist'].includes(userProfile?.role) && (
+                                  <button onClick={() => handleDelete(app.id)} className="p-2 text-neutral-400 hover:text-rose-600" title="Cancel/Delete"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                               )}
                            </div>
                        </div>
                     </div>
@@ -387,7 +445,9 @@ const Appointments = () => {
              </div>
 
              <div className="pt-6 border-t border-neutral-100 shrink-0">
-                <button onClick={() => setEditingAppointment({ appointmentDate: selectedDayInfo.date })} className="btn-primary w-full py-4 rounded-2xl shadow-xl shadow-primary-500/10 text-[10px] font-black uppercase tracking-widest">Confirm New Slot</button>
+                {userProfile?.role !== 'Lead-staff' && userProfile?.role !== 'Doctor' && (
+                  <button onClick={() => setEditingAppointment({ appointmentDate: selectedDayInfo.date })} className="btn-primary w-full py-4 rounded-2xl shadow-xl shadow-primary-500/10 text-[10px] font-black uppercase tracking-widest">Confirm New Slot</button>
+                )}
              </div>
           </div>
         )}
